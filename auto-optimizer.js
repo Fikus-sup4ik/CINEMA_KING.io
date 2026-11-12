@@ -1512,23 +1512,69 @@
 
     function addMenuItem() {
         var icon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
-        function open() { Lampa.Activity.push({ url: '', title: TITLE, component: COMPONENT, page: 1 }); }
-        var exists = false;
-        $('.menu__text').each(function () { if ($(this).text() === TITLE) exists = true; });
-        if (exists) return 'exists';
-        try {
-            if (Lampa.Menu && typeof Lampa.Menu.addButton === 'function') { Lampa.Menu.addButton(icon, TITLE, open); return 'api'; }
-        } catch (e) { dbg('Menu.addButton failed', e); }
-        var list = $('.menu .menu__list').eq(0);
-        if (list.length) {
+        function open() {
+            try { Lampa.Activity.push({ url: '', title: TITLE, component: COMPONENT, page: 1 }); }
+            catch (e) { dbg('Activity.push failed', e); noty(TITLE + ': не удалось открыть окно'); }
+        }
+        function exists() {
+            var found = false;
+            $('.menu__text').each(function () {
+                if (String($(this).text()).trim() === TITLE) found = true;
+            });
+            return found;
+        }
+        function insertDom() {
+            if (exists()) return true;
+            var list = $('.menu .menu__list').eq(0);
+            if (!list.length) list = $('.menu__list').eq(0);
+            if (!list.length) return false;
+
             var li = $('<li class="menu__item selector"><div class="menu__ico"></div><div class="menu__text"></div></li>');
             li.find('.menu__ico').html(icon);
             li.find('.menu__text').text(TITLE);
             li.on('hover:enter', open);
+            li.on('click', open);
             list.append(li);
-            return 'dom';
+            dbg('Menu item inserted into DOM');
+            return true;
         }
-        return null;
+
+        // Сначала используем штатный API, если он реально доступен.
+        try {
+            if (Lampa.Menu && typeof Lampa.Menu.addButton === 'function') {
+                Lampa.Menu.addButton(icon, TITLE, open);
+                if (exists()) return 'api';
+            }
+        } catch (e) { dbg('Menu.addButton failed, using DOM fallback', e); }
+
+        if (insertDom()) return 'dom';
+
+        // Меню может появиться позже события app:ready. Ждём его создания.
+        var attempts = 0;
+        var maxAttempts = 60;
+        var timer = setInterval(function () {
+            attempts++;
+            if (insertDom() || attempts >= maxAttempts) {
+                clearInterval(timer);
+                if (attempts >= maxAttempts && !exists()) {
+                    dbg('Menu container not found after waiting');
+                    noty(TITLE + ': меню Lampa не найдено. Перезапустите приложение.');
+                }
+            }
+        }, 500);
+
+        // Дополнительно реагируем на позднее создание DOM меню.
+        if (typeof MutationObserver !== 'undefined' && document.documentElement) {
+            var observer = new MutationObserver(function () {
+                if (insertDom()) {
+                    observer.disconnect();
+                    clearInterval(timer);
+                }
+            });
+            observer.observe(document.documentElement, { childList: true, subtree: true });
+            setTimeout(function () { try { observer.disconnect(); } catch (e) {} }, 30000);
+        }
+        return 'waiting';
     }
 
     var started = false;
