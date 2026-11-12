@@ -1510,6 +1510,37 @@
 
     /* ======================= меню и запуск ======================= */
 
+    function registerSettingsEntry() {
+        try {
+            if (!Lampa.SettingsApi || typeof Lampa.SettingsApi.addComponent !== 'function') {
+                dbg('SettingsApi.addComponent unavailable');
+                return false;
+            }
+            Lampa.SettingsApi.addComponent({
+                component: COMPONENT,
+                name: TITLE,
+                icon: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>'
+            });
+            if (typeof Lampa.SettingsApi.addParam === 'function') {
+                Lampa.SettingsApi.addParam({
+                    component: COMPONENT,
+                    param: { name: 'ao_open_panel', type: 'button' },
+                    field: { name: 'Открыть AUTO OPTIMIZER', description: 'Запустить диагностику и оптимизацию Lampa' },
+                    onRender: function (item) {
+                        item.on('hover:enter click', function () {
+                            Lampa.Activity.push({ url: '', title: TITLE, component: COMPONENT, page: 1 });
+                        });
+                    }
+                });
+            }
+            dbg('Settings entry registered');
+            return true;
+        } catch (e) {
+            dbg('SettingsApi registration failed', e);
+            return false;
+        }
+    }
+
     function addMenuItem() {
         var icon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
         function open() {
@@ -1597,9 +1628,10 @@
             startScheduler();
             injectCss();
             Lampa.Component.add(COMPONENT, Component);
+            var settingsEntry = registerSettingsEntry();
             var how = addMenuItem();
             if (!how) noty(TITLE + ': не удалось добавить пункт в меню');
-            dbg('v' + VERSION + ' ready, menu:', how, 'profile:', S.profile);
+            dbg('v' + VERSION + ' ready, menu:', how, 'settings entry:', settingsEntry, 'profile:', S.profile);
         } catch (e2) {
             dbg('init error', e2);
             addLog('own', 'Ошибка запуска: ' + (e2 && e2.message), true);
