@@ -7,7 +7,7 @@
 
     var PLUGIN_ID = 'cinema_king';
     var STORAGE_KEY = 'cinema_king_state_v2';
-    var STYLE_ID = 'cinema-king-styles-v2';
+    var STYLE_ID = 'cinema-king-styles-v3';
 
     // Полный справочник жанров TMDB
     var GENRES_MAP = {
@@ -36,24 +36,23 @@
         10768: 'Война и политика'
     };
 
-    // 13 жанров для мастера «Подобрать под мой вкус» с проверенными backdrop-кадрами TMDB
+    // 13 жанров для мастера «Подобрать под мой вкус» и фильтров рулетки
     var TASTE_WIZARD_GENRES = [
-        { id: 878, name: 'Фантастика', tvId: 10765, backdrop: '/xJHokMbljvjADYdit5fK5VQsXEG.jpg', accent: '#1d4ed8' },
-        { id: 28, name: 'Боевик', tvId: 10759, backdrop: '/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg', accent: '#0369a1' },
-        { id: 35, name: 'Комедия', tvId: 35, backdrop: '/r2J02Z2OpNTctfOSN1Ydgii51I3.jpg', accent: '#0284c7' },
-        { id: 18, name: 'Драма', tvId: 18, backdrop: '/hZkgoQYus5vegHoetLkCJzb17zJ.jpg', accent: '#1e40af' },
-        { id: 27, name: 'Ужасы', tvId: 9648, backdrop: '/roYyPiQDQKmIKUEhO912693tSja.jpg', accent: '#1e3a8a' },
-        { id: 53, name: 'Триллер', tvId: 80, backdrop: '/suaEOtk1N1sgg2MTM7oZd2cfVp3.jpg', accent: '#0f172a' },
-        { id: 9648, name: 'Детектив', tvId: 9648, backdrop: '/pbrkL804c8yAv3zBZR4QPEafpAR.jpg', accent: '#1d4ed8' },
-        { id: 12, name: 'Приключения', tvId: 10759, backdrop: '/jYEW5xZkZk2WTrdbMGAPFuBqbDc.jpg', accent: '#0369a1' },
-        { id: 10749, name: 'Мелодрама', tvId: 10749, backdrop: '/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg', accent: '#1e40af' },
-        { id: 14, name: 'Фэнтези', tvId: 10765, backdrop: '/vVpEOvdxVBP2aV166j5Xlvb5Cdc.jpg', accent: '#1d4ed8' },
-        { id: 80, name: 'Криминал', tvId: 80, backdrop: '/tmU7GeKVybMWFButWEGl2M4GeiP.jpg', accent: '#0f172a' },
-        { id: 10752, name: 'Военный', tvId: 10768, backdrop: '/ddIkmH3fnspJyRJPjf410765.jpg', accent: '#1e3a8a' },
-        { id: 36, name: 'Исторический', tvId: 18, backdrop: '/zb6fM1CX41D9rF9hdgclu0peUmy.jpg', accent: '#0369a1' }
+        { id: 878, name: 'Фантастика', tvId: 10765, backdrop: '/xJHokMbljvjADYdit5fK5VQsXEG.jpg' },
+        { id: 28, name: 'Боевик', tvId: 10759, backdrop: '/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg' },
+        { id: 35, name: 'Комедия', tvId: 35, backdrop: '/r2J02Z2OpNTctfOSN1Ydgii51I3.jpg' },
+        { id: 18, name: 'Драма', tvId: 18, backdrop: '/hZkgoQYus5vegHoetLkCJzb17zJ.jpg' },
+        { id: 27, name: 'Ужасы', tvId: 9648, backdrop: '/roYyPiQDQKmIKUEhO912693tSja.jpg' },
+        { id: 53, name: 'Триллер', tvId: 80, backdrop: '/suaEOtk1N1sgg2MTM7oZd2cfVp3.jpg' },
+        { id: 9648, name: 'Детектив', tvId: 9648, backdrop: '/pbrkL804c8yAv3zBZR4QPEafpAR.jpg' },
+        { id: 12, name: 'Приключения', tvId: 10759, backdrop: '/jYEW5xZkZk2WTrdbMGAPFuBqbDc.jpg' },
+        { id: 10749, name: 'Мелодрама', tvId: 10749, backdrop: '/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg' },
+        { id: 14, name: 'Фэнтези', tvId: 10765, backdrop: '/vVpEOvdxVBP2aV166j5Xlvb5Cdc.jpg' },
+        { id: 80, name: 'Криминал', tvId: 80, backdrop: '/tmU7GeKVybMWFButWEGl2M4GeiP.jpg' },
+        { id: 10752, name: 'Военный', tvId: 10768, backdrop: '/ddIkmH3fnspJyRJPjf410765.jpg' },
+        { id: 36, name: 'Исторический', tvId: 18, backdrop: '/zb6fM1CX41D9rF9hdgclu0peUmy.jpg' }
     ];
 
-    // Культовые резервные фоны для плавного слайдшоу на главном экране (если каталог ещё не загружен)
     var DEFAULT_HERO_BACKDROPS = [
         { title: 'Интерстеллар', backdrop: '/xJHokMbljvjADYdit5fK5VQsXEG.jpg' },
         { title: 'Начало', backdrop: '/8ZTVqvKDQ8emSGUEMjsS4yHAwrp.jpg' },
@@ -73,6 +72,21 @@
         { id: 'classic', label: 'Классика (до 2000)', from: '1950-01-01', to: '1999-12-31' }
     ];
 
+    var MAX_AGE_OPTIONS = [
+        { years: 0, label: 'Без ограничений' },
+        { years: 2, label: 'Не старше 2 лет' },
+        { years: 5, label: 'Не старше 5 лет' },
+        { years: 10, label: 'Не старше 10 лет' },
+        { years: 20, label: 'Не старше 20 лет' }
+    ];
+
+    var POPULARITY_OPTIONS = [
+        { id: 'any', label: 'Любая популярность', sortBy: 'popularity.desc', minVotes: 80 },
+        { id: 'hits', label: 'Главные хиты', sortBy: 'popularity.desc', minVotes: 600 },
+        { id: 'top_rated', label: 'Высший рейтинг', sortBy: 'vote_average.desc', minVotes: 300 },
+        { id: 'hidden', label: 'Неочевидные находки', sortBy: 'vote_count.asc', minVotes: 60 }
+    ];
+
     var RATING_OPTIONS = [
         { value: 0, label: 'Любой' },
         { value: 6.0, label: '6.0+' },
@@ -82,8 +96,8 @@
     ];
 
     var CONTENT_OPTIONS = [
-        { id: 'movie', label: 'Фильмы' },
-        { id: 'tv', label: 'Сериалы' },
+        { id: 'movie', label: 'Только фильмы' },
+        { id: 'tv', label: 'Только сериалы' },
         { id: 'all', label: 'Фильмы и сериалы' }
     ];
 
@@ -156,6 +170,69 @@
         return String(title).substring(0, 2).toUpperCase();
     }
 
+    function mapGenresForMediaType(genreIds, mediaType) {
+        if (!genreIds || !genreIds.length) return '';
+        if (mediaType !== 'tv') return genreIds.join('|');
+        var mapped = [];
+        for (var i = 0; i < genreIds.length; i++) {
+            var gid = genreIds[i];
+            var found = gid;
+            for (var j = 0; j < TASTE_WIZARD_GENRES.length; j++) {
+                if (TASTE_WIZARD_GENRES[j].id === gid) {
+                    found = TASTE_WIZARD_GENRES[j].tvId;
+                    break;
+                }
+            }
+            if (mapped.indexOf(found) === -1) mapped.push(found);
+        }
+        return mapped.join('|');
+    }
+
+    // Проверка просмотренного через доступные механизмы Lampa
+    function getWatchedMap(state) {
+        var watched = {};
+        var i;
+
+        // 1. Локальные победители Cinema King
+        if (state && state.winners) {
+            for (i = 0; i < state.winners.length; i++) {
+                watched[String(state.winners[i].id)] = true;
+            }
+        }
+
+        // 2. Штатные списки Lampa.Favorite (history / viewed)
+        try {
+            if (window.Lampa && Lampa.Favorite) {
+                var lists = ['history', 'viewed'];
+                for (var l = 0; l < lists.length; l++) {
+                    var arr = Lampa.Favorite.get ? Lampa.Favorite.get({ type: lists[l] }) : null;
+                    if (Object.prototype.toString.call(arr) === '[object Array]') {
+                        for (i = 0; i < arr.length; i++) {
+                            if (arr[i] && arr[i].id) watched[String(arr[i].id)] = true;
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+
+        // 3. Таймлайн просмотров в Lampa.Storage
+        try {
+            if (window.Lampa && Lampa.Storage) {
+                var favRaw = Lampa.Storage.get('favorite', null);
+                if (favRaw && typeof favRaw === 'object') {
+                    var hist = favRaw.history || favRaw.viewed || [];
+                    if (Object.prototype.toString.call(hist) === '[object Array]') {
+                        for (i = 0; i < hist.length; i++) {
+                            if (hist[i] && hist[i].id) watched[String(hist[i].id)] = true;
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
+
+        return watched;
+    }
+
     // =========================================================================
     // ХРАНИЛИЩЕ И МИГРАЦИЯ ДАННЫХ
     // =========================================================================
@@ -198,6 +275,16 @@
                 period: 'all',
                 minRating: 7.0,
                 sortStyle: 'popular'
+            },
+            roulette: {
+                contentType: 'movie',
+                genres: [],
+                period: 'all',
+                minRating: 0,
+                maxAgeYears: 0,
+                popularity: 'any',
+                excludeWatched: false,
+                streamMode: false
             }
         };
     }
@@ -297,6 +384,28 @@
                     if (['popular', 'acclaimed'].indexOf(raw.wizard.sortStyle) !== -1) {
                         def.wizard.sortStyle = raw.wizard.sortStyle;
                     }
+                }
+                if (raw.roulette && typeof raw.roulette === 'object') {
+                    if (['movie', 'tv', 'all'].indexOf(raw.roulette.contentType) !== -1) {
+                        def.roulette.contentType = raw.roulette.contentType;
+                    }
+                    if (Object.prototype.toString.call(raw.roulette.genres) === '[object Array]') {
+                        def.roulette.genres = raw.roulette.genres.slice(0, 13);
+                    }
+                    if (typeof raw.roulette.period === 'string') {
+                        def.roulette.period = raw.roulette.period;
+                    }
+                    if (!isNaN(parseFloat(raw.roulette.minRating))) {
+                        def.roulette.minRating = parseFloat(raw.roulette.minRating);
+                    }
+                    if (!isNaN(parseInt(raw.roulette.maxAgeYears, 10))) {
+                        def.roulette.maxAgeYears = parseInt(raw.roulette.maxAgeYears, 10);
+                    }
+                    if (typeof raw.roulette.popularity === 'string') {
+                        def.roulette.popularity = raw.roulette.popularity;
+                    }
+                    def.roulette.excludeWatched = !!raw.roulette.excludeWatched;
+                    def.roulette.streamMode = !!raw.roulette.streamMode;
                 }
             } catch (e) {
                 return createDefaultState();
@@ -425,7 +534,7 @@
             var params = {
                 page: opts.page || 1,
                 sort_by: opts.sortBy || 'popularity.desc',
-                'vote_count.gte': opts.minVotes !== undefined ? opts.minVotes : 120
+                'vote_count.gte': opts.minVotes !== undefined ? opts.minVotes : 100
             };
 
             if (opts.minRating && opts.minRating > 0) {
@@ -438,20 +547,33 @@
                 params.without_genres = opts.excludedGenres.join(',');
             }
 
+            var dateFrom = null;
+            var dateTo = null;
+
             if (opts.period && opts.period !== 'all') {
                 for (var i = 0; i < PERIOD_OPTIONS.length; i++) {
                     if (PERIOD_OPTIONS[i].id === opts.period) {
-                        var p = PERIOD_OPTIONS[i];
-                        if (type === 'movie') {
-                            if (p.from) params['primary_release_date.gte'] = p.from;
-                            if (p.to) params['primary_release_date.lte'] = p.to;
-                        } else {
-                            if (p.from) params['first_air_date.gte'] = p.from;
-                            if (p.to) params['first_air_date.lte'] = p.to;
-                        }
+                        dateFrom = PERIOD_OPTIONS[i].from;
+                        dateTo = PERIOD_OPTIONS[i].to;
                         break;
                     }
                 }
+            }
+
+            if (opts.maxAgeYears && opts.maxAgeYears > 0) {
+                var currentYear = new Date().getFullYear();
+                var minAllowedDate = (currentYear - opts.maxAgeYears) + '-01-01';
+                if (!dateFrom || minAllowedDate > dateFrom) {
+                    dateFrom = minAllowedDate;
+                }
+            }
+
+            if (type === 'movie') {
+                if (dateFrom) params['primary_release_date.gte'] = dateFrom;
+                if (dateTo) params['primary_release_date.lte'] = dateTo;
+            } else {
+                if (dateFrom) params['first_air_date.gte'] = dateFrom;
+                if (dateTo) params['first_air_date.lte'] = dateTo;
             }
 
             var url = this.buildApiUrl('discover/' + type, params);
@@ -459,7 +581,7 @@
 
             network.silent(url, function (data) {
                 if (!data || Object.prototype.toString.call(data.results) !== '[object Array]') {
-                    onSuccess([]);
+                    onSuccess([], 1);
                     return;
                 }
                 var list = [];
@@ -467,7 +589,8 @@
                     var norm = self.normalizeCard(data.results[j], type);
                     if (norm) list.push(norm);
                 }
-                onSuccess(list);
+                var totalPages = parseInt(data.total_pages, 10) || 1;
+                onSuccess(list, totalPages);
             }, function (err) {
                 if (onError) onError(err);
             });
@@ -511,7 +634,7 @@
 
         container.append(layerA).append(layerB).append(vignette).append(caption);
 
-        var activeLayer = 0; // 0 -> A, 1 -> B
+        var activeLayer = 0;
         var currentUrl = '';
         var requestToken = 0;
         var slideshowTimer = null;
@@ -532,7 +655,6 @@
                 var outgoing = activeLayer === 0 ? layerA : layerB;
 
                 incoming.css('background-image', 'url("' + url + '")');
-                // Принудительный reflow для плавного CSS-перехода
                 if (incoming[0]) {
                     void incoming[0].offsetWidth;
                 }
@@ -546,9 +668,7 @@
                     caption.removeClass('is-visible');
                 }
             };
-            img.onerror = function () {
-                // При ошибке загрузки оставляем предыдущий фон без мерцания
-            };
+            img.onerror = function () {};
             img.src = url;
         }
 
@@ -597,6 +717,46 @@
     // =========================================================================
 
     var TasteEngine = {
+        addDirectWinner: function (state, card) {
+            if (!card || !card.id) return false;
+            var existing = null;
+            var i;
+            for (i = 0; i < state.winners.length; i++) {
+                if (state.winners[i].id === card.id && state.winners[i].media_type === card.media_type) {
+                    existing = state.winners[i];
+                    break;
+                }
+            }
+            if (existing) {
+                existing.wins = (existing.wins || 1) + 1;
+                existing.lastWon = Date.now();
+            } else {
+                state.winners.unshift({
+                    id: card.id,
+                    media_type: card.media_type || 'movie',
+                    title: card.title,
+                    year: card.year || '',
+                    poster_path: card.poster_path || '',
+                    backdrop_path: card.backdrop_path || '',
+                    poster: card.poster || '',
+                    backdrop: card.backdrop || '',
+                    rating: card.rating || 0,
+                    genres: card.genres || [],
+                    overview: card.overview || '',
+                    wins: 1,
+                    lastWon: Date.now()
+                });
+                if (state.winners.length > 200) state.winners.pop();
+            }
+            var genres = card.genres || [];
+            for (i = 0; i < genres.length; i++) {
+                var gid = String(genres[i]);
+                state.genreScores[gid] = (state.genreScores[gid] || 0) + 1.5;
+            }
+            StorageManager.save(state);
+            return true;
+        },
+
         recordBattleChoice: function (state, winner, loser) {
             state.stats.comparisons += 1;
             state.stats.wins += 1;
@@ -610,7 +770,6 @@
                 state.genreScores[gid] = (state.genreScores[gid] || 0) + 3.0;
             }
 
-            // Мягкая корректировка: одиночный отказ не перечёркивает жанр
             for (i = 0; i < loseGenres.length; i++) {
                 gid = String(loseGenres[i]);
                 if (winGenres.indexOf(loseGenres[i]) === -1) {
@@ -631,37 +790,8 @@
                 state.ratingCount += 1;
             }
 
-            // Сохранение в «Мои победители»
-            var existing = null;
-            for (i = 0; i < state.winners.length; i++) {
-                if (state.winners[i].id === winner.id && state.winners[i].media_type === winner.media_type) {
-                    existing = state.winners[i];
-                    break;
-                }
-            }
-            if (existing) {
-                existing.wins = (existing.wins || 1) + 1;
-                existing.lastWon = Date.now();
-            } else {
-                state.winners.unshift({
-                    id: winner.id,
-                    media_type: winner.media_type,
-                    title: winner.title,
-                    year: winner.year,
-                    poster_path: winner.poster_path,
-                    backdrop_path: winner.backdrop_path,
-                    poster: winner.poster,
-                    backdrop: winner.backdrop,
-                    rating: winner.rating,
-                    genres: winner.genres || [],
-                    overview: winner.overview || '',
-                    wins: 1,
-                    lastWon: Date.now()
-                });
-                if (state.winners.length > 200) state.winners.pop();
-            }
+            this.addDirectWinner(state, winner);
 
-            // История выбора
             state.history.unshift({
                 winnerId: winner.id,
                 media_type: winner.media_type,
@@ -671,7 +801,6 @@
             });
             if (state.history.length > 60) state.history.pop();
 
-            // Снимок эволюции вкуса каждые 5 сравнений
             if (state.stats.comparisons % 5 === 0) {
                 var topNow = this.getTopGenres(state, 2);
                 if (topNow.length) {
@@ -757,7 +886,7 @@
         getTasteSummary: function (state) {
             var top = this.getTopGenres(state, 3);
             if (!top.length) {
-                return 'Выбери фильмы в битве или настрой вкус вручную — система сразу подстроится под тебя.';
+                return 'Выбери фильмы в битве, крути рулетку или настрой вкус вручную.';
             }
             var names = top.map(function (g) { return g.name.toLowerCase(); });
             var text = 'Твои фавориты: ' + names.join(', ');
@@ -920,7 +1049,7 @@
     };
 
     // =========================================================================
-    // ВСТРОЕННЫЕ СТИЛИ (СТРИМИНГОВЫЙ КИНЕМАТОГРАФИЧНЫЙ ИНТЕРФЕЙС)
+    // ВСТРОЕННЫЕ СТИЛИ (СТРИМИНГОВЫЙ КИНЕМАТОГРАФИЧНЫЙ ИНТЕРФЕЙС + РУЛЕТКА)
     // =========================================================================
 
     function injectStyles() {
@@ -946,8 +1075,8 @@
             '.ck-brand { display: flex; align-items: center; gap: 0.65em; flex-shrink: 0; }' +
             '.ck-brand-mark { width: 2.15em; height: 2.15em; border-radius: 0.55em; background: #1d4ed8; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }' +
             '.ck-brand-title { font-size: 1.25em; font-weight: 800; letter-spacing: 0.04em; color: #ffffff; }' +
-            '.ck-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4em; }' +
-            '.ck-tab { padding: 0.48em 0.95em; border-radius: 0.55em; background: rgba(17,24,39,0.78); border: 1px solid rgba(148,163,184,0.16); color: #cbd5e1; font-size: 0.88em; font-weight: 600; cursor: pointer; transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease; }' +
+            '.ck-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 0.38em; }' +
+            '.ck-tab { padding: 0.46em 0.88em; border-radius: 0.55em; background: rgba(17,24,39,0.78); border: 1px solid rgba(148,163,184,0.16); color: #cbd5e1; font-size: 0.86em; font-weight: 600; cursor: pointer; transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease; }' +
             '.ck-tab.is-active { background: #1d4ed8; border-color: #3b82f6; color: #ffffff; }' +
             '.ck-tab.focus { transform: scale(1.05); border-color: #60a5fa; box-shadow: 0 0 0 2px #3b82f6; color: #ffffff; }' +
 
@@ -956,7 +1085,7 @@
             '@keyframes ckSectionIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }' +
 
             /* Главный экран */
-            '.ck-hero { padding: 2.2em 0 1.8em; max-width: 48em; }' +
+            '.ck-hero { padding: 2.2em 0 1.8em; max-width: 52em; }' +
             '.ck-hero-kicker { display: inline-block; font-size: 0.8em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #60a5fa; margin-bottom: 0.7em; }' +
             '.ck-hero-title { font-size: 2.55em; font-weight: 800; line-height: 1.12; letter-spacing: -0.01em; margin: 0 0 0.45em; color: #ffffff; }' +
             '.ck-hero-sub { font-size: 1.06em; line-height: 1.55; color: #cbd5e1; margin: 0 0 1.6em; }' +
@@ -1014,13 +1143,62 @@
             '.ck-card-cta { display: flex; align-items: center; justify-content: center; width: 100%; padding: 0.7em 1em; border-radius: 0.55em; background: #1d4ed8; color: #ffffff; font-weight: 700; font-size: 0.92em; }' +
             '.ck-battle-footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75em; margin-top: 1.2em; }' +
 
+            /* ===================================================================== */
+            /* КИНО-РУЛЕТКА И РЕЖИМ ДЛЯ СТРИМОВ                                      */
+            /* ===================================================================== */
+            '.ck-rl-stage { position: relative; padding: 1.6em 1.8em 2em; border-radius: 1.05em; background: rgba(12,17,27,0.9); border: 1px solid rgba(59,130,246,0.24); text-align: center; margin-bottom: 1.4em; }' +
+            '.ck-rl-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.8em; margin-bottom: 1.1em; }' +
+            '.ck-rl-title { font-size: 2.05em; font-weight: 800; color: #ffffff; margin: 0 0 0.28em; letter-spacing: -0.01em; }' +
+            '.ck-rl-sub { font-size: 0.96em; color: #94a3b8; margin: 0 0 1.4em; }' +
+
+            /* Лента рулетки и центральный индикатор */
+            '.ck-rl-viewport { position: relative; width: 100%; height: 17.8em; margin: 0 auto 1.6em; overflow: hidden; border-radius: 0.85em; background: rgba(7,10,16,0.88); border: 1px solid rgba(148,163,184,0.18); }' +
+            '.ck-rl-pointer-top { position: absolute; left: 50%; top: 0; transform: translateX(-50%); z-index: 6; width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 15px solid #3b82f6; }' +
+            '.ck-rl-pointer-bottom { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 6; width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 15px solid #3b82f6; }' +
+            '.ck-rl-center-frame { position: absolute; left: 50%; top: 0.55em; bottom: 0.55em; width: 11.4em; transform: translateX(-50%); z-index: 5; border: 2px solid #3b82f6; border-radius: 0.7em; pointer-events: none; box-shadow: 0 0 0 9999px rgba(7,10,16,0.48); }' +
+            '.ck-rl-track { position: absolute; left: 0; top: 0.8em; display: flex; align-items: stretch; gap: 0.85em; will-change: transform; }' +
+            '.ck-rl-item { width: 10.6em; height: 16.2em; border-radius: 0.65em; overflow: hidden; background: #111827; border: 1px solid rgba(148,163,184,0.18); flex-shrink: 0; position: relative; transition: border-color 0.25s ease, transform 0.25s ease; }' +
+            '.ck-rl-item img { width: 100%; height: 100%; object-fit: cover; display: block; }' +
+            '.ck-rl-item-label { position: absolute; left: 0; right: 0; bottom: 0; padding: 1.6em 0.55em 0.5em; background: linear-gradient(180deg, rgba(7,10,16,0) 0%, rgba(7,10,16,0.95) 100%); font-size: 0.76em; font-weight: 700; color: #f8fafc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }' +
+            '.ck-rl-item.is-winner { border-color: #60a5fa; transform: scale(1.03); z-index: 4; }' +
+
+            /* Большая кнопка КРУТИТЬ */
+            '.ck-rl-spin-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 14.5em; padding: 1em 2.6em; border-radius: 0.8em; background: #2563eb; border: 2px solid #60a5fa; color: #ffffff; font-size: 1.24em; font-weight: 900; letter-spacing: 0.08em; cursor: pointer; transition: transform 0.16s ease, background 0.16s ease; }' +
+            '.ck-rl-spin-btn.focus { transform: scale(1.06); background: #1d4ed8; box-shadow: 0 0 0 3px #93c5fd; }' +
+            '.ck-rl-spin-btn.is-disabled { opacity: 0.55; pointer-events: none; }' +
+
+            /* Режим для стримов */
+            '.ck-root.is-stream .ck-topbar { display: none !important; }' +
+            '.ck-root.is-stream .ck-content { padding: 1.6em 2.6em 2.2em; }' +
+            '.ck-root.is-stream .ck-rl-stage { padding: 2.2em 2em 2.5em; background: rgba(7,10,16,0.82); border-color: rgba(59,130,246,0.38); }' +
+            '.ck-root.is-stream .ck-rl-title { font-size: 2.75em; }' +
+            '.ck-root.is-stream .ck-rl-viewport { height: 22.5em; }' +
+            '.ck-root.is-stream .ck-rl-center-frame { width: 14.4em; border-width: 3px; }' +
+            '.ck-root.is-stream .ck-rl-item { width: 13.6em; height: 20.9em; }' +
+            '.ck-root.is-stream .ck-rl-spin-btn { font-size: 1.48em; min-width: 16em; padding: 1.05em 3em; }' +
+
+            /* Полноэкранное окно результата рулетки */
+            '.ck-rl-result-modal { position: relative; border-radius: 1.05em; overflow: hidden; background: rgba(11,15,25,0.96); border: 1px solid rgba(59,130,246,0.42); animation: ckWinnerReveal 0.42s ease both; }' +
+            '@keyframes ckWinnerReveal { from { opacity: 0; transform: scale(0.95) translateY(14px); } to { opacity: 1; transform: scale(1) translateY(0); } }' +
+            '.ck-rl-result-banner { position: relative; min-height: 11em; background-size: cover; background-position: center 25%; }' +
+            '.ck-rl-result-banner-grad { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: linear-gradient(180deg, rgba(11,15,25,0.28) 0%, rgba(11,15,25,0.98) 100%); }' +
+            '.ck-rl-result-body { position: relative; z-index: 2; display: flex; gap: 1.8em; padding: 0 2em 2em; margin-top: -5.5em; }' +
+            '.ck-rl-result-poster { width: 13.5em; height: 20.2em; border-radius: 0.8em; overflow: hidden; flex-shrink: 0; background: #1e293b; border: 2px solid rgba(96,165,250,0.5); }' +
+            '.ck-rl-result-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }' +
+            '.ck-rl-result-info { flex: 1; padding-top: 3.8em; min-width: 0; }' +
+            '.ck-rl-result-kicker { font-size: 0.82em; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: #60a5fa; margin-bottom: 0.45em; }' +
+            '.ck-rl-result-title { font-size: 2.15em; font-weight: 800; line-height: 1.15; color: #ffffff; margin: 0 0 0.55em; }' +
+            '.ck-rl-result-overview { font-size: 0.98em; line-height: 1.55; color: #cbd5e1; margin: 0 0 1.4em; max-width: 52em; }' +
+            '.ck-root.is-stream .ck-rl-result-title { font-size: 2.55em; }' +
+            '.ck-root.is-stream .ck-rl-result-poster { width: 15.5em; height: 23.2em; }' +
+
             /* Мастер «Подобрать под мой вкус» (13 жанров и 3 шага) */
             '.ck-wizard-steps { display: flex; gap: 0.6em; margin-bottom: 1.2em; }' +
             '.ck-step-pill { padding: 0.35em 0.85em; border-radius: 0.45em; font-size: 0.82em; font-weight: 700; background: rgba(15,20,30,0.85); color: #64748b; border: 1px solid rgba(148,163,184,0.14); }' +
             '.ck-step-pill.is-active { background: #1d4ed8; color: #ffffff; border-color: #3b82f6; }' +
             '.ck-genre-grid { display: flex; flex-wrap: wrap; gap: 0.85em; margin-bottom: 1.4em; }' +
             '.ck-genre-tile { position: relative; width: calc(20% - 0.68em); height: 6.2em; border-radius: 0.75em; overflow: hidden; background: #111827; border: 2px solid rgba(148,163,184,0.18); cursor: pointer; display: flex; align-items: flex-end; padding: 0.75em 0.85em; transition: transform 0.16s ease, border-color 0.16s ease; }' +
-            '.ck-genre-tile-bg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0.48; transition: opacity 0.2s ease, transform 0.25s ease; }' +
+            '.ck-genre-tile-bg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0.48; transition: opacity 0.2s ease; }' +
             '.ck-genre-tile-grad { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: linear-gradient(180deg, rgba(7,10,16,0.2) 0%, rgba(7,10,16,0.9) 100%); }' +
             '.ck-genre-tile-label { position: relative; z-index: 2; font-size: 0.96em; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; justify-content: space-between; width: 100%; }' +
             '.ck-genre-tile-check { width: 1.35em; height: 1.35em; border-radius: 50%; background: rgba(15,23,42,0.8); border: 1px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; font-size: 0.8em; color: transparent; }' +
@@ -1029,7 +1207,7 @@
             '.ck-genre-tile.is-selected .ck-genre-tile-check { background: #2563eb; border-color: #93c5fd; color: #ffffff; }' +
             '.ck-genre-tile.focus { transform: scale(1.04); border-color: #93c5fd; box-shadow: 0 0 0 2px #3b82f6; }' +
 
-            /* Сетка карточек (13 рекомендаций и Мои победители) */
+            /* Сетка карточек */
             '.ck-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.8em; margin-bottom: 1.2em; }' +
             '.ck-search-box { display: inline-flex; align-items: center; gap: 0.5em; padding: 0.48em 0.9em; border-radius: 0.55em; background: rgba(15,20,30,0.9); border: 1px solid rgba(148,163,184,0.24); color: #e2e8f0; font-size: 0.88em; cursor: pointer; }' +
             '.ck-search-box.focus { border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f6; }' +
@@ -1061,10 +1239,10 @@
             '.ck-history-win { color: #93c5fd; font-weight: 700; }' +
             '.ck-history-lose { color: #94a3b8; }' +
 
-            '.ck-setting-group { margin-bottom: 1.35em; }' +
-            '.ck-setting-label { font-size: 0.94em; font-weight: 700; color: #e2e8f0; margin-bottom: 0.6em; }' +
-            '.ck-chips { display: flex; flex-wrap: wrap; gap: 0.5em; }' +
-            '.ck-chip { padding: 0.48em 0.92em; border-radius: 0.55em; background: rgba(17,24,39,0.88); border: 1px solid rgba(148,163,184,0.22); color: #cbd5e1; font-size: 0.86em; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease; }' +
+            '.ck-setting-group { margin-bottom: 1.25em; }' +
+            '.ck-setting-label { font-size: 0.92em; font-weight: 700; color: #e2e8f0; margin-bottom: 0.55em; }' +
+            '.ck-chips { display: flex; flex-wrap: wrap; gap: 0.48em; }' +
+            '.ck-chip { padding: 0.46em 0.88em; border-radius: 0.55em; background: rgba(17,24,39,0.88); border: 1px solid rgba(148,163,184,0.22); color: #cbd5e1; font-size: 0.85em; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease; }' +
             '.ck-chip.is-selected { background: #1d4ed8; border-color: #60a5fa; color: #ffffff; }' +
             '.ck-chip.is-excluded { background: rgba(153,27,27,0.75); border-color: #f87171; color: #fee2e2; text-decoration: line-through; }' +
             '.ck-chip.focus { transform: scale(1.05); box-shadow: 0 0 0 2px #3b82f6; color: #ffffff; }' +
@@ -1089,6 +1267,8 @@
                 '.ck-vs-badge { width: 2.7em; height: 2.7em; font-size: 0.88em; }' +
                 '.ck-item-card { width: calc(50% - 0.55em); }' +
                 '.ck-genre-tile { width: calc(33.333% - 0.57em); }' +
+                '.ck-rl-result-body { flex-direction: column; margin-top: -3.5em; }' +
+                '.ck-rl-result-info { padding-top: 0.5em; }' +
             '}' +
             '@media (max-width: 640px) {' +
                 '.ck-content { padding: 0.9em 1em 2.5em; }' +
@@ -1097,13 +1277,14 @@
                 '.ck-card-poster { width: 100%; min-width: 100%; height: 14.5em; }' +
                 '.ck-item-card { width: 100%; }' +
                 '.ck-genre-tile { width: calc(50% - 0.43em); height: 5.4em; }' +
+                '.ck-rl-title { font-size: 1.55em; }' +
             '}' +
 
             /* Режим сниженной нагрузки на анимации */
-            '.ck-lite-motion .ck-view, .ck-lite-motion .ck-card--enter-left, .ck-lite-motion .ck-card--enter-right, .ck-lite-motion .ck-item-card, .ck-lite-motion .ck-spinner { animation: none !important; }' +
+            '.ck-lite-motion .ck-view, .ck-lite-motion .ck-card--enter-left, .ck-lite-motion .ck-card--enter-right, .ck-lite-motion .ck-item-card, .ck-lite-motion .ck-rl-result-modal, .ck-lite-motion .ck-spinner { animation: none !important; }' +
             '.ck-lite-motion .ck-bg-layer, .ck-lite-motion .ck-card, .ck-lite-motion .ck-btn, .ck-lite-motion .ck-tab, .ck-lite-motion .ck-bar-fill { transition: none !important; }' +
             '@media (prefers-reduced-motion: reduce) {' +
-                '.ck-view, .ck-card--enter-left, .ck-card--enter-right, .ck-item-card, .ck-spinner { animation: none !important; }' +
+                '.ck-view, .ck-card--enter-left, .ck-card--enter-right, .ck-item-card, .ck-rl-result-modal, .ck-spinner { animation: none !important; }' +
                 '.ck-bg-layer, .ck-card, .ck-btn, .ck-tab, .ck-bar-fill, .ck-toast { transition: none !important; }' +
             '}';
 
@@ -1151,8 +1332,16 @@
         var currentChallenger = null;
         var isKothLoading = false;
 
+        // Сессионное состояние «Кино-рулетки»
+        var rouletteCache = {};
+        var rouletteSeen = {};
+        var roulettePreviewPool = [];
+        var rouletteResult = null;
+        var isRouletteSpinning = false;
+        var rouletteRafId = null;
+
         // Сессионное состояние «Подобрать под мой вкус» (13 фильмов)
-        var wizardStep = 1; // 1 = 13 жанров, 2 = параметры, 3 = 13 результатов
+        var wizardStep = 1;
         var wizardResults = [];
         var wizardSeenIds = {};
         var wizardPage = 1;
@@ -1168,6 +1357,22 @@
         function applyMotionClass() {
             if (state.settings.liteAnimations) html.addClass('ck-lite-motion');
             else html.removeClass('ck-lite-motion');
+        }
+
+        function applyStreamClass() {
+            if (activeTab === 'roulette' && state.roulette.streamMode) {
+                html.addClass('is-stream');
+            } else {
+                html.removeClass('is-stream');
+            }
+        }
+
+        function stopRouletteAnimation() {
+            if (rouletteRafId) {
+                cancelAnimationFrame(rouletteRafId);
+                rouletteRafId = null;
+            }
+            isRouletteSpinning = false;
         }
 
         function showToast(message) {
@@ -1234,7 +1439,7 @@
         }
 
         // ---------------------------------------------------------------------
-        // ВЕРХНЯЯ ПАНЕЛЬ НАВИГАЦИИ (8 РАЗДЕЛОВ)
+        // ВЕРХНЯЯ ПАНЕЛЬ НАВИГАЦИИ (9 РАЗДЕЛОВ С КИНО-РУЛЕТКОЙ)
         // ---------------------------------------------------------------------
 
         function renderTopbar() {
@@ -1242,6 +1447,7 @@
                 { id: 'home', label: 'Главная' },
                 { id: 'battle', label: 'Битва фильмов' },
                 { id: 'koth', label: 'Царь горы' },
+                { id: 'roulette', label: 'Кино-рулетка' },
                 { id: 'wizard', label: 'Подобрать под мой вкус' },
                 { id: 'recs', label: 'Рекомендации' },
                 { id: 'winners', label: 'Мои победители' },
@@ -1270,13 +1476,16 @@
         }
 
         function switchTab(tabId) {
+            stopRouletteAnimation();
             activeTab = tabId;
+            applyStreamClass();
             renderTopbar();
             scroll.reset();
 
             if (tabId === 'home') renderHome();
             else if (tabId === 'battle') renderBattle();
             else if (tabId === 'koth') renderKoth();
+            else if (tabId === 'roulette') renderRoulette();
             else if (tabId === 'wizard') renderWizard();
             else if (tabId === 'recs') renderRecs();
             else if (tabId === 'winners') renderWinners();
@@ -1285,7 +1494,7 @@
         }
 
         // ---------------------------------------------------------------------
-        // 1. ГЛАВНАЯ (С ФОНОВЫМ СЛАЙДШОУ КИНОПОСТЕРОВ)
+        // 1. ГЛАВНАЯ
         // ---------------------------------------------------------------------
 
         function startHomeSlideshow() {
@@ -1311,13 +1520,19 @@
                 '<div class="ck-hero">' +
                     '<div class="ck-hero-kicker">Кинематографический подбор • Lampa</div>' +
                     '<h1 class="ck-hero-title">Найди свой идеальный фильм</h1>' +
-                    '<p class="ck-hero-sub">Сравнивай фильмы в дуэлях, удерживай трон в «Царе горы» или выбери любимые жанры — система изучит твой вкус и соберёт точную коллекцию.</p>' +
+                    '<p class="ck-hero-sub">Сравнивай фильмы в дуэлях, удерживай трон в «Царе горы», крути «Кино-рулетку» на вечер или настрой подбор по вкусу.</p>' +
                     '<div class="ck-actions"></div>' +
                 '</div>'
             );
 
             var startBtn = $('<div class="ck-btn ck-btn--primary selector">Битва фильмов</div>');
             startBtn.on('hover:enter', function () { switchTab('battle'); });
+
+            var rouletteBtn = $('<div class="ck-btn ck-btn--secondary selector">Кино-рулетка</div>');
+            rouletteBtn.on('hover:enter', function () {
+                rouletteResult = null;
+                switchTab('roulette');
+            });
 
             var wizardBtn = $('<div class="ck-btn ck-btn--secondary selector">Подобрать под мой вкус</div>');
             wizardBtn.on('hover:enter', function () {
@@ -1328,7 +1543,7 @@
             var kothBtn = $('<div class="ck-btn ck-btn--secondary selector">Царь горы</div>');
             kothBtn.on('hover:enter', function () { switchTab('koth'); });
 
-            hero.find('.ck-actions').append(startBtn).append(wizardBtn).append(kothBtn);
+            hero.find('.ck-actions').append(startBtn).append(rouletteBtn).append(wizardBtn).append(kothBtn);
 
             var kpi = $(
                 '<div class="ck-kpi-grid">' +
@@ -1404,7 +1619,6 @@
                 $(this).replaceWith('<div class="ck-poster-fallback">' + esc(getInitials(card.title)) + '</div>');
             });
 
-            // При фокусе пультом фон плавно меняется на кадр текущего фильма
             el.on('hover:focus', function () {
                 updateCardBackdrop(card);
             });
@@ -1473,7 +1687,7 @@
         }
 
         // ---------------------------------------------------------------------
-        // 2. РЕЖИМ «БИТВА ФИЛЬМОВ» (С ПРОГРЕССОМ РАУНДОВ)
+        // 2. РЕЖИМ «БИТВА ФИЛЬМОВ»
         // ---------------------------------------------------------------------
 
         function renderBattle() {
@@ -1848,7 +2062,568 @@
         }
 
         // ---------------------------------------------------------------------
-        // 4. РЕЖИМ «ПОДОБРАТЬ ПОД МОЙ ВКУС» (13 ЖАНРОВ → РОВНО 13 ФИЛЬМОВ)
+        // 4. НОВЫЙ РЕЖИМ «КИНО-РУЛЕТКА» + РЕЖИМ «ДЛЯ СТРИМА»
+        // ---------------------------------------------------------------------
+
+        function getRouletteCacheKey() {
+            var r = state.roulette;
+            return [
+                r.contentType,
+                (r.genres || []).slice().sort().join(','),
+                r.period,
+                r.minRating,
+                r.maxAgeYears,
+                r.popularity,
+                r.excludeWatched ? '1' : '0'
+            ].join('|');
+        }
+
+        function fetchRouletteCandidates(onSuccess, onError) {
+            var r = state.roulette;
+            var key = getRouletteCacheKey();
+            var watchedMap = r.excludeWatched ? getWatchedMap(state) : {};
+
+            if (!rouletteCache[key]) {
+                rouletteCache[key] = { items: [], totalPages: 12, fetchedPages: {} };
+            }
+            var entry = rouletteCache[key];
+
+            function getAvailableFromCache() {
+                var valid = [];
+                for (var i = 0; i < entry.items.length; i++) {
+                    var c = entry.items[i];
+                    if (r.excludeWatched && watchedMap[String(c.id)]) continue;
+                    if (!rouletteSeen[cardKey(c)]) {
+                        valid.push(c);
+                    }
+                }
+                return valid;
+            }
+
+            var ready = getAvailableFromCache();
+            if (ready.length >= 8) {
+                onSuccess(ready, entry.items);
+                return;
+            }
+
+            // Выбираем случайную ещё не загруженную страницу пагинации TMDB
+            var maxPage = Math.min(25, Math.max(1, entry.totalPages || 12));
+            var pageToLoad = 1 + Math.floor(Math.random() * maxPage);
+            if (entry.fetchedPages[pageToLoad]) {
+                for (var p = 1; p <= maxPage; p++) {
+                    if (!entry.fetchedPages[p]) {
+                        pageToLoad = p;
+                        break;
+                    }
+                }
+            }
+            entry.fetchedPages[pageToLoad] = true;
+
+            var mType = r.contentType === 'all' ? (Math.random() < 0.5 ? 'movie' : 'tv') : r.contentType;
+            var popOpt = POPULARITY_OPTIONS[0];
+            for (var pi = 0; pi < POPULARITY_OPTIONS.length; pi++) {
+                if (POPULARITY_OPTIONS[pi].id === r.popularity) {
+                    popOpt = POPULARITY_OPTIONS[pi];
+                    break;
+                }
+            }
+
+            var withGenres = mapGenresForMediaType(r.genres, mType);
+
+            CatalogService.fetchDiscover(network, {
+                mediaType: mType,
+                page: pageToLoad,
+                minRating: r.minRating,
+                period: r.period,
+                maxAgeYears: r.maxAgeYears,
+                withGenres: withGenres,
+                sortBy: popOpt.sortBy,
+                minVotes: popOpt.minVotes
+            }, function (items, totalPages) {
+                if (totalPages && totalPages > 0) entry.totalPages = totalPages;
+                mergeUnique(entry.items, items);
+
+                var available = getAvailableFromCache();
+                // Если все фильмы по запросу уже выпадали в этой сессии — сбрасываем историю повторов рулетки
+                if (!available.length && entry.items.length > 0) {
+                    rouletteSeen = {};
+                    available = getAvailableFromCache();
+                }
+
+                // Если строгие фильтры дали 0 результатов — делаем мягкий резервный запрос
+                if (!available.length) {
+                    CatalogService.fetchDiscover(network, {
+                        mediaType: mType,
+                        page: 1 + Math.floor(Math.random() * 5),
+                        minRating: 0,
+                        period: 'all',
+                        withGenres: withGenres,
+                        sortBy: 'popularity.desc',
+                        minVotes: 50
+                    }, function (fallbackItems) {
+                        mergeUnique(entry.items, fallbackItems);
+                        var fbReady = getAvailableFromCache();
+                        if (fbReady.length) onSuccess(fbReady, entry.items);
+                        else onError('По выбранным фильтрам не найдено фильмов в каталоге.');
+                    }, function () {
+                        onError('Ошибка сети при обращении к каталогу TMDB.');
+                    });
+                    return;
+                }
+
+                onSuccess(available, entry.items);
+            }, function () {
+                if (ready.length) onSuccess(ready, entry.items);
+                else onError('Ошибка сети при загрузке каталога TMDB.');
+            });
+        }
+
+        function buildRouletteReel(pool, winnerCard) {
+            // Формируем ленту из 32 карточек, где победитель точно стоит на 26-й позиции
+            var totalSlots = 32;
+            var winnerIndex = 26;
+            var reel = [];
+            var source = pool && pool.length ? pool : [winnerCard];
+
+            for (var i = 0; i < totalSlots; i++) {
+                if (i === winnerIndex) {
+                    reel.push(winnerCard);
+                } else {
+                    var rand = source[Math.floor(Math.random() * source.length)];
+                    if (source.length > 1 && rand && cardKey(rand) === cardKey(winnerCard)) {
+                        rand = source[(i + 1) % source.length];
+                    }
+                    reel.push(rand || winnerCard);
+                }
+            }
+            return { items: reel, winnerIndex: winnerIndex };
+        }
+
+        function renderRoulette() {
+            applyStreamClass();
+
+            if (rouletteResult) {
+                renderRouletteResultModal(rouletteResult);
+                return;
+            }
+
+            var r = state.roulette;
+            var isStream = !!r.streamMode;
+            var view = $('<div class="ck-view"></div>');
+
+            // Верхний блок рулетки
+            var stage = $('<div class="ck-rl-stage"></div>');
+            var head = $('<div class="ck-rl-head"></div>');
+
+            var streamToggle = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector">' + (isStream ? 'Выйти из режима стрима' : 'Режим для стрима') + '</div>');
+            streamToggle.on('hover:enter', function () {
+                if (isRouletteSpinning) return;
+                r.streamMode = !r.streamMode;
+                StorageManager.save(state);
+                renderRoulette();
+            });
+
+            head.append('<div style="font-size:0.85em;font-weight:700;color:#60a5fa;letter-spacing:0.08em;text-transform:uppercase;">' + (isStream ? 'STREAM MODE • LIVE' : 'СЛУЧАЙНЫЙ ВЫБОР ИЗ КАТАЛОГА') + '</div>');
+            head.append(streamToggle);
+            stage.append(head);
+
+            stage.append('<h1 class="ck-rl-title">Что будем смотреть сегодня?</h1>');
+            if (!isStream) {
+                stage.append('<p class="ck-rl-sub">Нажми «КРУТИТЬ», чтобы рулетка выбрала случайный фильм или сериал на вечер.</p>');
+            }
+
+            // Лента постеров
+            var viewport = $(
+                '<div class="ck-rl-viewport">' +
+                    '<div class="ck-rl-pointer-top"></div>' +
+                    '<div class="ck-rl-center-frame"></div>' +
+                    '<div class="ck-rl-pointer-bottom"></div>' +
+                    '<div class="ck-rl-track"></div>' +
+                '</div>'
+            );
+
+            var track = viewport.find('.ck-rl-track');
+            var previewItems = roulettePreviewPool.length ? roulettePreviewPool : DEFAULT_HERO_BACKDROPS.map(function (b, idx) {
+                return {
+                    id: 1000 + idx,
+                    media_type: 'movie',
+                    title: b.title,
+                    poster: CatalogService.getImageUrl(b.backdrop, 'w500'),
+                    backdrop: CatalogService.getImageUrl(b.backdrop, 'w1280')
+                };
+            });
+
+            function populateTrack(cardsList) {
+                track.empty();
+                track.css('transform', 'translate3d(0px, 0px, 0px)');
+                for (var i = 0; i < cardsList.length; i++) {
+                    var item = cardsList[i];
+                    var imgHtml = item.poster
+                        ? '<img src="' + esc(item.poster) + '" alt="' + esc(item.title) + '">'
+                        : '<div class="ck-poster-fallback" style="font-size:1.5em;">' + esc(getInitials(item.title)) + '</div>';
+                    var slot = $(
+                        '<div class="ck-rl-item" data-idx="' + i + '">' +
+                            imgHtml +
+                            '<div class="ck-rl-item-label">' + esc(item.title) + '</div>' +
+                        '</div>'
+                    );
+                    slot.find('img').on('error', function () {
+                        $(this).replaceWith('<div class="ck-poster-fallback" style="font-size:1.5em;">CK</div>');
+                    });
+                    track.append(slot);
+                }
+            }
+
+            var initialLoop = [];
+            for (var k = 0; k < 16; k++) {
+                initialLoop.push(previewItems[k % previewItems.length]);
+            }
+            populateTrack(initialLoop);
+            stage.append(viewport);
+
+            // Большая кнопка КРУТИТЬ
+            var spinBtn = $('<div class="ck-rl-spin-btn selector">КРУТИТЬ</div>');
+            spinBtn.on('hover:enter', function () {
+                if (isRouletteSpinning) return;
+                startRouletteSpin(spinBtn, viewport, track);
+            });
+            stage.append(spinBtn);
+            view.append(stage);
+
+            // Настройки рулетки скрываются в режиме для стрима, чтобы не перегружать захват экрана
+            if (!isStream) {
+                view.append(buildRouletteFiltersPanel());
+            }
+
+            body.empty().append(view);
+            refreshFocus(spinBtn);
+
+            // Фоновая предзагрузка превью-постеров по текущим фильтрам
+            if (!roulettePreviewPool.length) {
+                fetchRouletteCandidates(function (avail, allItems) {
+                    roulettePreviewPool = allItems.slice(0, 16);
+                    if (!isRouletteSpinning && activeTab === 'roulette' && !rouletteResult) {
+                        var loop = [];
+                        for (var x = 0; x < 16; x++) loop.push(roulettePreviewPool[x % roulettePreviewPool.length]);
+                        populateTrack(loop);
+                        updateCardBackdrop(roulettePreviewPool[0]);
+                    }
+                }, function () {});
+            } else {
+                updateCardBackdrop(roulettePreviewPool[0]);
+            }
+        }
+
+        function startRouletteSpin(spinBtn, viewport, track) {
+            isRouletteSpinning = true;
+            spinBtn.addClass('is-disabled').text('ПОДБИРАЕМ...');
+
+            fetchRouletteCandidates(function (available, allCached) {
+                if (activeTab !== 'roulette') {
+                    isRouletteSpinning = false;
+                    return;
+                }
+
+                // Выбираем случайного победителя из непоказанных в этой сессии
+                var winner = available[Math.floor(Math.random() * available.length)];
+                rouletteSeen[cardKey(winner)] = true;
+                roulettePreviewPool = allCached.slice(0, 18);
+
+                var reelData = buildRouletteReel(allCached, winner);
+                track.empty();
+                track.css('transform', 'translate3d(0px, 0px, 0px)');
+
+                for (var i = 0; i < reelData.items.length; i++) {
+                    var item = reelData.items[i];
+                    var imgHtml = item.poster
+                        ? '<img src="' + esc(item.poster) + '" alt="' + esc(item.title) + '">'
+                        : '<div class="ck-poster-fallback" style="font-size:1.5em;">' + esc(getInitials(item.title)) + '</div>';
+                    var slot = $(
+                        '<div class="ck-rl-item" data-idx="' + i + '">' +
+                            imgHtml +
+                            '<div class="ck-rl-item-label">' + esc(item.title) + '</div>' +
+                        '</div>'
+                    );
+                    slot.find('img').on('error', function () {
+                        $(this).replaceWith('<div class="ck-poster-fallback" style="font-size:1.5em;">CK</div>');
+                    });
+                    track.append(slot);
+                }
+
+                spinBtn.text('ВРАЩАЕТСЯ...');
+
+                // Измеряем реальные размеры слота и вьюпорта в пикселях (корректно для любого масштаба ТВ)
+                var firstSlot = track.find('.ck-rl-item').eq(0);
+                var secondSlot = track.find('.ck-rl-item').eq(1);
+                var slotWidth = firstSlot.outerWidth() || 170;
+                var stepPx = secondSlot.length ? (secondSlot.position().left - firstSlot.position().left) : (slotWidth + 14);
+                var vpWidth = viewport.innerWidth() || 800;
+
+                var targetCenter = (reelData.winnerIndex * stepPx) + (slotWidth / 2);
+                var finalTranslateX = (vpWidth / 2) - targetCenter;
+
+                var duration = isReducedMotion(state) ? 450 : 4100;
+                var startTime = null;
+
+                function finishSpin() {
+                    isRouletteSpinning = false;
+                    rouletteRafId = null;
+
+                    var winSlot = track.find('.ck-rl-item').eq(reelData.winnerIndex);
+                    winSlot.addClass('is-winner');
+                    updateCardBackdrop(winner);
+                    spinBtn.text('ВЫБРАНО!');
+
+                    var revealDelay = isReducedMotion(state) ? 150 : 750;
+                    setTimeout(function () {
+                        if (activeTab === 'roulette') {
+                            rouletteResult = winner;
+                            renderRouletteResultModal(winner);
+                        }
+                    }, revealDelay);
+                }
+
+                function stepFrame(timestamp) {
+                    if (!startTime) startTime = timestamp;
+                    var elapsed = timestamp - startTime;
+                    var progress = Math.min(1, elapsed / duration);
+                    // Плавное кубическое замедление (easeOutCubic)
+                    var eased = 1 - Math.pow(1 - progress, 3);
+                    var currentX = finalTranslateX * eased;
+
+                    track.css('transform', 'translate3d(' + currentX.toFixed(1) + 'px, 0px, 0px)');
+
+                    if (progress < 1 && activeTab === 'roulette') {
+                        rouletteRafId = requestAnimationFrame(stepFrame);
+                    } else {
+                        finishSpin();
+                    }
+                }
+
+                rouletteRafId = requestAnimationFrame(stepFrame);
+            }, function (errMsg) {
+                isRouletteSpinning = false;
+                spinBtn.removeClass('is-disabled').text('КРУТИТЬ');
+                showToast(errMsg);
+            });
+        }
+
+        function buildRouletteFiltersPanel() {
+            var r = state.roulette;
+            var panel = $('<div class="ck-panel"><div class="ck-panel-title">Настройки выбора рулетки</div></div>');
+
+            function onFilterChanged() {
+                roulettePreviewPool = [];
+                StorageManager.save(state);
+                renderRoulette();
+            }
+
+            // 1. Тип контента
+            var gType = $('<div class="ck-setting-group"><div class="ck-setting-label">Тип контента</div><div class="ck-chips"></div></div>');
+            for (var i = 0; i < CONTENT_OPTIONS.length; i++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (r.contentType === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        if (isRouletteSpinning) return;
+                        r.contentType = opt.id;
+                        onFilterChanged();
+                    });
+                    gType.find('.ck-chips').append(chip);
+                })(CONTENT_OPTIONS[i]);
+            }
+            panel.append(gType);
+
+            // 2. Жанры (Все жанры или несколько одновременно)
+            var gGenres = $('<div class="ck-setting-group"><div class="ck-setting-label">Жанры (можно выбрать несколько)</div><div class="ck-chips"></div></div>');
+            var allGenresChip = $('<div class="ck-chip selector' + (!r.genres.length ? ' is-selected' : '') + '">Все жанры</div>');
+            allGenresChip.on('hover:enter', function () {
+                if (isRouletteSpinning) return;
+                r.genres = [];
+                onFilterChanged();
+            });
+            gGenres.find('.ck-chips').append(allGenresChip);
+
+            for (var g = 0; g < TASTE_WIZARD_GENRES.length; g++) {
+                (function (genreObj) {
+                    var isSel = r.genres.indexOf(genreObj.id) !== -1;
+                    var chip = $('<div class="ck-chip selector' + (isSel ? ' is-selected' : '') + '">' + esc(genreObj.name) + '</div>');
+                    chip.on('hover:enter', function () {
+                        if (isRouletteSpinning) return;
+                        var idx = r.genres.indexOf(genreObj.id);
+                        if (idx === -1) r.genres.push(genreObj.id);
+                        else r.genres.splice(idx, 1);
+                        onFilterChanged();
+                    });
+                    gGenres.find('.ck-chips').append(chip);
+                })(TASTE_WIZARD_GENRES[g]);
+            }
+            panel.append(gGenres);
+
+            // 3. Год выпуска
+            var gPeriod = $('<div class="ck-setting-group"><div class="ck-setting-label">Год выпуска</div><div class="ck-chips"></div></div>');
+            for (var p = 0; p < PERIOD_OPTIONS.length; p++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (r.period === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        if (isRouletteSpinning) return;
+                        r.period = opt.id;
+                        onFilterChanged();
+                    });
+                    gPeriod.find('.ck-chips').append(chip);
+                })(PERIOD_OPTIONS[p]);
+            }
+            panel.append(gPeriod);
+
+            // 4. Максимальный возраст фильма
+            var gAge = $('<div class="ck-setting-group"><div class="ck-setting-label">Максимальный возраст фильма</div><div class="ck-chips"></div></div>');
+            for (var a = 0; a < MAX_AGE_OPTIONS.length; a++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (r.maxAgeYears === opt.years ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        if (isRouletteSpinning) return;
+                        r.maxAgeYears = opt.years;
+                        onFilterChanged();
+                    });
+                    gAge.find('.ck-chips').append(chip);
+                })(MAX_AGE_OPTIONS[a]);
+            }
+            panel.append(gAge);
+
+            // 5. Минимальный рейтинг
+            var gRating = $('<div class="ck-setting-group"><div class="ck-setting-label">Минимальный рейтинг</div><div class="ck-chips"></div></div>');
+            for (var rt = 0; rt < RATING_OPTIONS.length; rt++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (r.minRating === opt.value ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        if (isRouletteSpinning) return;
+                        r.minRating = opt.value;
+                        onFilterChanged();
+                    });
+                    gRating.find('.ck-chips').append(chip);
+                })(RATING_OPTIONS[rt]);
+            }
+            panel.append(gRating);
+
+            // 6. Популярность и исключение просмотренного
+            var gExtra = $('<div class="ck-setting-group" style="margin-bottom:0;"><div class="ck-setting-label">Популярность и фильтрация</div><div class="ck-chips"></div></div>');
+            for (var pop = 0; pop < POPULARITY_OPTIONS.length; pop++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (r.popularity === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        if (isRouletteSpinning) return;
+                        r.popularity = opt.id;
+                        onFilterChanged();
+                    });
+                    gExtra.find('.ck-chips').append(chip);
+                })(POPULARITY_OPTIONS[pop]);
+            }
+
+            var watchedChip = $('<div class="ck-chip selector' + (r.excludeWatched ? ' is-selected' : '') + '">' + (r.excludeWatched ? '✓ Исключить просмотренное' : 'Исключить просмотренное') + '</div>');
+            watchedChip.on('hover:enter', function () {
+                if (isRouletteSpinning) return;
+                r.excludeWatched = !r.excludeWatched;
+                onFilterChanged();
+            });
+            gExtra.find('.ck-chips').append(watchedChip);
+
+            panel.append(gExtra);
+            return panel;
+        }
+
+        function renderRouletteResultModal(card) {
+            applyStreamClass();
+            updateCardBackdrop(card);
+
+            var view = $('<div class="ck-view"></div>');
+            var modal = $('<div class="ck-rl-result-modal"></div>');
+
+            var bannerUrl = card.backdrop || card.poster || '';
+            var banner = $('<div class="ck-rl-result-banner" style="' + (bannerUrl ? 'background-image:url(\'' + esc(bannerUrl) + '\');' : '') + '"><div class="ck-rl-result-banner-grad"></div></div>');
+
+            var posterHtml = card.poster
+                ? '<img src="' + esc(card.poster) + '" alt="' + esc(card.title) + '">'
+                : '<div class="ck-poster-fallback" style="font-size:2.8em;">' + esc(getInitials(card.title)) + '</div>';
+
+            var genresHtml = '';
+            var gList = (card.genres || []).slice(0, 4);
+            for (var i = 0; i < gList.length; i++) {
+                var gn = getGenreName(gList[i]);
+                if (gn) genresHtml += '<span class="ck-genre-chip">' + esc(gn) + '</span>';
+            }
+
+            var typeLabel = card.media_type === 'tv' ? 'Сериал' : 'Фильм';
+            var ratingText = card.rating ? '★ ' + card.rating : 'Без оценки';
+            var yearText = card.year || 'Год неизвестен';
+            var runtimeText = card.runtime ? '• ' + formatRuntime(card.runtime) : '';
+
+            var bodyHtml = $(
+                '<div class="ck-rl-result-body">' +
+                    '<div class="ck-rl-result-poster">' + posterHtml + '</div>' +
+                    '<div class="ck-rl-result-info">' +
+                        '<div class="ck-rl-result-kicker">Выбор Кино-рулетки • ' + esc(typeLabel) + '</div>' +
+                        '<h1 class="ck-rl-result-title">' + esc(card.title) + '</h1>' +
+                        '<div class="ck-meta-row" style="font-size:0.98em;">' +
+                            '<span class="ck-rating-pill">' + esc(ratingText) + '</span>' +
+                            '<span>' + esc(yearText) + '</span>' +
+                            '<span class="ck-rl-runtime-slot">' + esc(runtimeText) + '</span>' +
+                        '</div>' +
+                        '<div class="ck-genres">' + genresHtml + '</div>' +
+                        '<p class="ck-rl-result-overview">' + esc(card.overview || 'Описание отсутствует в каталоге.') + '</p>' +
+                        '<div class="ck-actions"></div>' +
+                    '</div>' +
+                '</div>'
+            );
+
+            bodyHtml.find('img').on('error', function () {
+                $(this).replaceWith('<div class="ck-poster-fallback" style="font-size:2.8em;">' + esc(getInitials(card.title)) + '</div>');
+            });
+
+            if (!card.runtime) {
+                CatalogService.fetchRuntime(network, card, function (mins) {
+                    bodyHtml.find('.ck-rl-runtime-slot').text('• ' + formatRuntime(mins));
+                });
+            }
+
+            var actions = bodyHtml.find('.ck-actions');
+
+            var openBtn = $('<div class="ck-btn ck-btn--primary selector">Открыть фильм</div>');
+            openBtn.on('hover:enter', function () {
+                openLampaCard(card);
+            });
+
+            var spinAgainBtn = $('<div class="ck-btn ck-btn--secondary selector">Крутить ещё</div>');
+            spinAgainBtn.on('hover:enter', function () {
+                rouletteResult = null;
+                renderRoulette();
+            });
+
+            var addWinnerBtn = $('<div class="ck-btn ck-btn--secondary selector">Добавить в победители</div>');
+            addWinnerBtn.on('hover:enter', function () {
+                TasteEngine.addDirectWinner(state, card);
+                addWinnerBtn.text('✓ В списке победителей');
+                showToast('«' + card.title + '» добавлен в «Мои победители».');
+            });
+
+            actions.append(openBtn).append(spinAgainBtn).append(addWinnerBtn);
+
+            if (state.roulette.streamMode) {
+                var exitStreamBtn = $('<div class="ck-btn ck-btn--secondary selector">Выйти из режима стрима</div>');
+                exitStreamBtn.on('hover:enter', function () {
+                    state.roulette.streamMode = false;
+                    StorageManager.save(state);
+                    renderRouletteResultModal(card);
+                });
+                actions.append(exitStreamBtn);
+            }
+
+            modal.append(banner).append(bodyHtml);
+            view.append(modal);
+            body.empty().append(view);
+            refreshFocus(spinAgainBtn);
+        }
+
+        // ---------------------------------------------------------------------
+        // 5. РЕЖИМ «ПОДОБРАТЬ ПОД МОЙ ВКУС» (13 ЖАНРОВ → РОВНО 13 ФИЛЬМОВ)
         // ---------------------------------------------------------------------
 
         function renderWizard() {
@@ -1943,7 +2718,6 @@
 
             var panel = $('<div class="ck-panel"><div class="ck-panel-title">Уточни предпочтения</div></div>');
 
-            // 1. Формат
             var gType = $('<div class="ck-setting-group"><div class="ck-setting-label">Что подбираем</div><div class="ck-chips"></div></div>');
             for (var i = 0; i < CONTENT_OPTIONS.length; i++) {
                 (function (opt) {
@@ -1958,7 +2732,6 @@
             }
             panel.append(gType);
 
-            // 2. Годы выпуска / Современные или классика
             var gPer = $('<div class="ck-setting-group"><div class="ck-setting-label">Эпоха и годы выпуска</div><div class="ck-chips"></div></div>');
             for (var p = 0; p < PERIOD_OPTIONS.length; p++) {
                 (function (opt) {
@@ -1973,7 +2746,6 @@
             }
             panel.append(gPer);
 
-            // 3. Минимальный рейтинг
             var gRat = $('<div class="ck-setting-group"><div class="ck-setting-label">Минимальный рейтинг</div><div class="ck-chips"></div></div>');
             for (var r = 0; r < RATING_OPTIONS.length; r++) {
                 (function (opt) {
@@ -1988,7 +2760,6 @@
             }
             panel.append(gRat);
 
-            // 4. Акцент подборки (Хиты или Высшая оценка)
             var sortOpts = [
                 { id: 'popular', label: 'Популярные хиты' },
                 { id: 'acclaimed', label: 'Максимальная оценка зрителей' }
@@ -2030,23 +2801,6 @@
             refreshFocus(buildBtn);
         }
 
-        function mapGenresForMediaType(genreIds, mediaType) {
-            if (mediaType !== 'tv') return genreIds.join('|');
-            var mapped = [];
-            for (var i = 0; i < genreIds.length; i++) {
-                var gid = genreIds[i];
-                var found = gid;
-                for (var j = 0; j < TASTE_WIZARD_GENRES.length; j++) {
-                    if (TASTE_WIZARD_GENRES[j].id === gid) {
-                        found = TASTE_WIZARD_GENRES[j].tvId;
-                        break;
-                    }
-                }
-                if (mapped.indexOf(found) === -1) mapped.push(found);
-            }
-            return mapped.join('|');
-        }
-
         function generateThirteenPicks() {
             if (isWizardLoading) return;
             isWizardLoading = true;
@@ -2084,7 +2838,6 @@
                         }
                     }
 
-                    // Если показаны все уникальные фильмы по запросу — сбрасываем кэш повторов и добираем до 13
                     if (collected.length < 13 && items.length === 0 && Object.keys(wizardSeenIds).length > 13) {
                         wizardSeenIds = {};
                         wizardPage = 1;
@@ -2192,7 +2945,7 @@
         }
 
         // ---------------------------------------------------------------------
-        // 5. РАЗДЕЛ «РЕКОМЕНДАЦИИ»
+        // 6. РАЗДЕЛ «РЕКОМЕНДАЦИИ»
         // ---------------------------------------------------------------------
 
         function renderRecs(forceReload) {
@@ -2329,7 +3082,7 @@
         }
 
         // ---------------------------------------------------------------------
-        // 6. РАЗДЕЛ «МОИ ПОБЕДИТЕЛИ» (С ПОИСКОМ И СОРТИРОВКОЙ)
+        // 7. РАЗДЕЛ «МОИ ПОБЕДИТЕЛИ»
         // ---------------------------------------------------------------------
 
         function openWinnersSearch() {
@@ -2359,7 +3112,7 @@
                 var empty = $(
                     '<div class="ck-state-box">' +
                         '<h3 style="margin:0 0 0.5em;">Список победителей пока пуст</h3>' +
-                        '<p style="color:#94a3b8;margin:0 0 1.2em;">Выбирай фильмы в «Битве фильмов», и они сохранятся в этой коллекции.</p>' +
+                        '<p style="color:#94a3b8;margin:0 0 1.2em;">Выбирай фильмы в дуэлях или добавляй их из «Кино-рулетки».</p>' +
                     '</div>'
                 );
                 var goBtn = $('<div class="ck-btn ck-btn--primary selector">Начать битву</div>');
@@ -2440,7 +3193,7 @@
                                             '<span class="ck-rating-pill">' + (item.rating ? '★ ' + item.rating : '—') + '</span>' +
                                             '<span>' + esc(item.year || '') + '</span>' +
                                         '</div>' +
-                                        '<div style="font-size:0.84em;color:#93c5fd;">Побед в битвах: ' + (item.wins || 1) + '</div>' +
+                                        '<div style="font-size:0.84em;color:#93c5fd;">Побед: ' + (item.wins || 1) + '</div>' +
                                     '</div>' +
                                 '</div>' +
                                 '<div class="ck-item-actions">' +
@@ -2479,7 +3232,7 @@
         }
 
         // ---------------------------------------------------------------------
-        // 7. РАЗДЕЛ «МОЙ ВКУС»
+        // 8. РАЗДЕЛ «МОЙ ВКУС»
         // ---------------------------------------------------------------------
 
         function renderTaste() {
@@ -2550,7 +3303,7 @@
         }
 
         // ---------------------------------------------------------------------
-        // 8. РАЗДЕЛ «НАСТРОЙКИ»
+        // 9. РАЗДЕЛ «НАСТРОЙКИ»
         // ---------------------------------------------------------------------
 
         function renderSettings() {
@@ -2569,7 +3322,6 @@
                 StorageManager.save(state);
             }
 
-            // 1. Количество раундов в Битве фильмов
             var rndGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Количество раундов в сессии «Битвы фильмов»</div><div class="ck-chips"></div></div>');
             for (var rIdx = 0; rIdx < ROUNDS_OPTIONS.length; rIdx++) {
                 (function (cnt) {
@@ -2585,7 +3337,6 @@
             }
             panel.append(rndGroup);
 
-            // 2. Тип контента
             var typeGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Тип контента</div><div class="ck-chips"></div></div>');
             for (var i = 0; i < CONTENT_OPTIONS.length; i++) {
                 (function (opt) {
@@ -2600,7 +3351,6 @@
             }
             panel.append(typeGroup);
 
-            // 3. Минимальный рейтинг
             var ratGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Минимальный рейтинг</div><div class="ck-chips"></div></div>');
             for (var r = 0; r < RATING_OPTIONS.length; r++) {
                 (function (opt) {
@@ -2615,7 +3365,6 @@
             }
             panel.append(ratGroup);
 
-            // 4. Период выпуска
             var perGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Период выпуска</div><div class="ck-chips"></div></div>');
             for (var p = 0; p < PERIOD_OPTIONS.length; p++) {
                 (function (opt) {
@@ -2630,7 +3379,6 @@
             }
             panel.append(perGroup);
 
-            // 5. Исключение жанров
             var exGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Исключить жанры из каталога</div><div class="ck-chips"></div></div>');
             for (var g = 0; g < SELECTABLE_GENRES.length; g++) {
                 (function (gid) {
@@ -2648,7 +3396,6 @@
             }
             panel.append(exGroup);
 
-            // 6. Производительность на слабых ТВ
             var perfGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Производительность (для слабых ТВ)</div><div class="ck-chips"></div></div>');
             var liteChip = $('<div class="ck-chip selector' + (state.settings.liteAnimations ? ' is-selected' : '') + '">' + (state.settings.liteAnimations ? 'Упрощённые анимации: ВКЛ' : 'Упрощённые анимации: ВЫКЛ') + '</div>');
             liteChip.on('hover:enter', function () {
@@ -2660,7 +3407,6 @@
             perfGroup.find('.ck-chips').append(liteChip);
             panel.append(perfGroup);
 
-            // 7. Сброс данных
             var resetPanel = $('<div class="ck-panel"><div class="ck-panel-title">Управление сохранёнными данными</div><div class="ck-actions"></div></div>');
 
             var resetTasteBtn = $('<div class="ck-btn ck-btn--danger selector">Сбросить профиль вкусов</div>');
@@ -2748,7 +3494,15 @@
                     if (Navigator.canmove('down')) Navigator.move('down');
                 },
                 back: function () {
-                    if (activeTab === 'wizard' && wizardStep > 1) {
+                    if (isRouletteSpinning) return;
+                    if (activeTab === 'roulette' && rouletteResult) {
+                        rouletteResult = null;
+                        renderRoulette();
+                    } else if (activeTab === 'roulette' && state.roulette.streamMode) {
+                        state.roulette.streamMode = false;
+                        StorageManager.save(state);
+                        renderRoulette();
+                    } else if (activeTab === 'wizard' && wizardStep > 1) {
                         wizardStep -= 1;
                         renderWizard();
                     } else if (activeTab !== 'home') {
@@ -2764,10 +3518,12 @@
 
         this.pause = function () {
             backdropMgr.stopSlideshow();
+            stopRouletteAnimation();
         };
 
         this.stop = function () {
             backdropMgr.stopSlideshow();
+            stopRouletteAnimation();
         };
 
         this.render = function () {
@@ -2776,6 +3532,7 @@
 
         this.destroy = function () {
             clearTimeout(toastTimer);
+            stopRouletteAnimation();
             backdropMgr.destroy();
             network.clear();
             scroll.destroy();
