@@ -1,1662 +1,2067 @@
-/*!
- * AUTO OPTIMIZER 1.0.0 для Lampa
- *
- * Что плагин реально делает (и только это):
- *  - собирает данные об устройстве из доступных браузерных API;
- *  - измеряет: скорость выполнения JS, плавность отрисовки (синтетический тест),
- *    длинные задачи, размер DOM, незавершённые изображения, память JS (если API есть),
- *    время ответа сетевых хостов, которые использует Lampa;
- *  - считает Performance Score 0-100 по описанной формуле;
- *  - применяет обратимые настройки СВОЕГО профиля: async-декодирование и lazy-загрузка
- *    изображений, отключение backdrop-filter, отключение CSS-анимаций, preconnect;
- *  - ведёт журнал ошибок, чистит только собственные данные (ключи ao_*);
- *  - после оптимизации измеряет снова и откатывает изменения, если стало хуже.
- *
- * Чего плагин НЕ делает: не чистит кэш ТВ, не меняет DNS/Wi-Fi/системные настройки,
- * не трогает данные, историю и аккаунты Lampa, не определяет CPU и физическую RAM.
- *
- * Написан на ES5 ради старых браузеров телевизоров.
- */
 (function () {
     'use strict';
 
-    if (window.auto_optimizer_plugin) return;
-    window.auto_optimizer_plugin = true;
+    // Защита от повторной инициализации
+    if (window.cinema_king_plugin) return;
+    window.cinema_king_plugin = true;
 
-    var VERSION = '1.0.0';
-    var COMPONENT = 'auto_optimizer';
-    var TITLE = 'AUTO OPTIMIZER';
-    var K = { settings: 'ao_settings', snap: 'ao_snapshots', log: 'ao_log', net: 'ao_net', last: 'ao_last', clean: 'ao_last_clean' };
-    var TMP_PREFIX = 'ao_tmp_';
-    var OWN_LIMIT = 200 * 1024;
-    var DAY = 86400000;
+    var PLUGIN_ID = 'cinema_king';
+    var STORAGE_KEY = 'cinema_king_state_v1';
+    var STYLE_ID = 'cinema-king-styles';
 
-    var SELF_SRC = '';
-    try { SELF_SRC = (document.currentScript && document.currentScript.src) || ''; } catch (e) { SELF_SRC = ''; }
-
-    /* ======================= утилиты ======================= */
-
-    function now() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
-    function clone(v) { return JSON.parse(JSON.stringify(v)); }
-    function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
-    function lin(x, best, worst) { return clamp((worst - x) / (worst - best) * 100, 0, 100); }
-    function round(x, d) { var p = Math.pow(10, d || 0); return Math.round(x * p) / p; }
-    function pad(n) { return n < 10 ? '0' + n : '' + n; }
-    function fmtTime(t) { var d = new Date(t); return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
-    function fmtBytes(b) { return b < 1024 ? b + ' Б' : b < 1048576 ? round(b / 1024, 1) + ' КБ' : round(b / 1048576, 1) + ' МБ'; }
-    function median(a) { if (!a.length) return null; var s = a.slice().sort(function (x, y) { return x - y; }); var m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
-    function noty(t) { try { Lampa.Noty.show(t); } catch (e) { /* ignore */ } }
-    function dbg() { try { console.log.apply(console, ['[AUTO OPTIMIZER]'].concat([].slice.call(arguments))); } catch (e) { /* ignore */ } }
-
-    /* ======================= собственное хранилище (localStorage, ключи ao_*) ======================= */
-
-    var corruptKeys = [];
-
-    function jget(k, def) {
-        var s;
-        try { s = localStorage.getItem(k); } catch (e) { return def; }
-        if (s === null || s === undefined) return def;
-        try { return JSON.parse(s); } catch (e2) { if (corruptKeys.indexOf(k) < 0) corruptKeys.push(k); return def; }
-    }
-
-    function jset(k, v) {
-        try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; }
-    }
-
-    /* ======================= журнал ======================= */
-
-    var logBuf = null;
-    var persistTimer = null;
-
-    function loadLog() {
-        if (logBuf === null) { var v = jget(K.log, []); logBuf = Array.isArray(v) ? v : []; }
-        return logBuf;
-    }
-
-    function persistLog() {
-        persistTimer = null;
-        jset(K.log, loadLog());
-    }
-
-    function addLog(type, msg, own) {
-        var l = loadLog();
-        var t = Date.now();
-        var text = String(msg).slice(0, 200);
-        var last = l[l.length - 1];
-        if (last && last.type === type && last.msg === text && t - last.t < 60000) { last.n = (last.n || 1) + 1; last.t = t; }
-        else { l.push({ t: t, type: type, msg: text, n: 1, own: own ? 1 : 0 }); if (l.length > 150) l.splice(0, l.length - 150); }
-        if (!persistTimer) persistTimer = setTimeout(persistLog, 5000);
-    }
-
-    function logCount(types, ms, ownOnly) {
-        var l = loadLog();
-        var from = Date.now() - ms;
-        var c = 0;
-        for (var i = 0; i < l.length; i++) {
-            if (l[i].t >= from && types.indexOf(l[i].type) >= 0 && (!ownOnly || l[i].own)) c += l[i].n || 1;
-        }
-        return c;
-    }
-
-    /* ======================= настройки и снимки ======================= */
-
-    var PROFILES = {
-        eco: { imgAsync: true, imgLazy: true, noBackdrop: true, noAnim: true, preconnect: false },
-        balanced: { imgAsync: true, imgLazy: true, noBackdrop: true, noAnim: false, preconnect: true },
-        performance: { imgAsync: true, imgLazy: false, noBackdrop: false, noAnim: false, preconnect: true }
+    // Справочник жанров TMDB (фильмы и сериалы)
+    var GENRES_MAP = {
+        28: 'Боевик',
+        12: 'Приключения',
+        16: 'Мультфильм',
+        35: 'Комедия',
+        80: 'Криминал',
+        99: 'Документальный',
+        18: 'Драма',
+        10751: 'Семейный',
+        14: 'Фэнтези',
+        36: 'История',
+        27: 'Ужасы',
+        10402: 'Музыка',
+        9648: 'Детектив',
+        10749: 'Мелодрама',
+        878: 'Фантастика',
+        10770: 'ТВ-фильм',
+        53: 'Триллер',
+        10752: 'Военный',
+        37: 'Вестерн',
+        10759: 'Боевик и приключения',
+        10762: 'Детский',
+        10765: 'Фантастика и фэнтези',
+        10768: 'Война и политика'
     };
-    var FEATURE_NAMES = {
-        imgAsync: 'Асинхронное декодирование изображений',
-        imgLazy: 'Отложенная загрузка изображений (lazy)',
-        noBackdrop: 'Отключение backdrop-filter (размытие)',
-        noAnim: 'Отключение CSS-анимаций и переходов',
-        preconnect: 'Предварительное соединение с хостами Lampa'
-    };
-    var PROFILE_NAMES = { none: 'не выбран', eco: 'ECO MODE', balanced: 'BALANCED MODE', performance: 'PERFORMANCE MODE' };
 
-    function defaults() {
-        return { v: 1, profile: 'none', autoClean: true, features: { imgAsync: false, imgLazy: false, noBackdrop: false, noAnim: false, preconnect: false } };
+    var SELECTABLE_GENRES = [
+        28, 12, 16, 35, 80, 99, 18, 10751, 14, 36, 27, 9648, 10749, 878, 53, 10752, 37
+    ];
+
+    var PERIOD_OPTIONS = [
+        { id: 'all', label: 'Любой период', from: null, to: null },
+        { id: '2020s', label: '2020-е', from: '2020-01-01', to: '2029-12-31' },
+        { id: '2010s', label: '2010-е', from: '2010-01-01', to: '2019-12-31' },
+        { id: '2000s', label: '2000-е', from: '2000-01-01', to: '2009-12-31' },
+        { id: '1990s', label: '1990-е', from: '1990-01-01', to: '1999-12-31' },
+        { id: 'classic', label: 'Классика (до 1990)', from: '1950-01-01', to: '1989-12-31' }
+    ];
+
+    var RATING_OPTIONS = [
+        { value: 0, label: 'Любой' },
+        { value: 6.0, label: '6.0+' },
+        { value: 7.0, label: '7.0+' },
+        { value: 7.5, label: '7.5+' },
+        { value: 8.0, label: '8.0+' }
+    ];
+
+    var CONTENT_OPTIONS = [
+        { id: 'movie', label: 'Только фильмы' },
+        { id: 'tv', label: 'Только сериалы' },
+        { id: 'all', label: 'Фильмы и сериалы' }
+    ];
+
+    // Кэш продолжительности (runtime) в оперативной памяти на сессию
+    var runtimeCache = {};
+
+    // =========================================================================
+    // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+    // =========================================================================
+
+    function esc(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
-    function validSettings(s) {
-        if (!s || typeof s !== 'object' || !s.features || typeof s.features !== 'object') return false;
-        if (!PROFILE_NAMES.hasOwnProperty(s.profile)) return false;
-        for (var f in FEATURE_NAMES) { if (typeof s.features[f] !== 'boolean') return false; }
-        return true;
-    }
-
-    var S = (function () { var s = jget(K.settings, null); return validSettings(s) ? s : defaults(); })();
-    var settingsWereInvalid = (function () { var s = jget(K.settings, null); return s !== null && !validSettings(s); })();
-
-    function saveSettings() { return jset(K.settings, S); }
-
-    function getSnaps() { var a = jget(K.snap, []); return Array.isArray(a) ? a : []; }
-
-    function pushSnapshot(reason) {
-        var a = getSnaps();
-        var snap = { id: Date.now(), t: Date.now(), reason: reason, settings: clone(S) };
-        a.unshift(snap);
-        jset(K.snap, a.slice(0, 5));
-        return snap;
-    }
-
-    function restoreSnapshot(id) {
-        var a = getSnaps();
-        for (var i = 0; i < a.length; i++) {
-            if (a[i].id === id && validSettings(a[i].settings)) {
-                pushSnapshot('Перед откатом');
-                S = clone(a[i].settings);
-                saveSettings();
-                applyFeatures();
-                addLog('repair', 'Восстановлен профиль из снимка ' + fmtTime(a[i].t));
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /* ======================= Lag Killer: применение функций ======================= */
-
-    var F = { observer: null, pending: [], timer: null };
-    var IMG_DECODING = typeof HTMLImageElement !== 'undefined' && ('decoding' in HTMLImageElement.prototype);
-    var IMG_LOADING = typeof HTMLImageElement !== 'undefined' && ('loading' in HTMLImageElement.prototype);
-
-    function setStyle(id, css, on) {
-        var el = document.getElementById(id);
-        if (on) {
-            if (!el) {
-                el = document.createElement('style');
-                el.id = id;
-                el.appendChild(document.createTextNode(css));
-                document.head.appendChild(el);
-            }
-        } else if (el && el.parentNode) {
-            el.parentNode.removeChild(el);
-        }
-    }
-
-    function markImg(img, c) {
-        var m = img.getAttribute('data-ao-img') || '';
-        if (m.indexOf(c) < 0) img.setAttribute('data-ao-img', m + c);
-    }
-
-    function tuneImg(img) {
+    function isReducedMotion() {
         try {
-            if (IMG_DECODING && S.features.imgAsync && !img.hasAttribute('decoding')) { img.setAttribute('decoding', 'async'); markImg(img, 'd'); }
-            if (IMG_LOADING && S.features.imgLazy && !img.hasAttribute('loading') && !img.complete) { img.setAttribute('loading', 'lazy'); markImg(img, 'l'); }
-        } catch (e) { /* ignore */ }
-    }
-
-    function revertImgs() {
-        var list = document.querySelectorAll('img[data-ao-img]');
-        for (var i = 0; i < list.length; i++) {
-            var m = list[i].getAttribute('data-ao-img') || '';
-            if (m.indexOf('d') >= 0) list[i].removeAttribute('decoding');
-            if (m.indexOf('l') >= 0) list[i].removeAttribute('loading');
-            list[i].removeAttribute('data-ao-img');
-        }
-    }
-
-    function flushImgs() {
-        F.timer = null;
-        var batch = F.pending.splice(0, 150);
-        for (var i = 0; i < batch.length; i++) {
-            var n = batch[i];
-            if (!n || n.nodeType !== 1) continue;
-            if (n.tagName === 'IMG') tuneImg(n);
-            else if (n.querySelectorAll) {
-                var im = n.querySelectorAll('img');
-                for (var j = 0; j < im.length && j < 100; j++) tuneImg(im[j]);
-            }
-        }
-        if (F.pending.length) F.timer = setTimeout(flushImgs, 50);
-    }
-
-    function stopImgObserver() {
-        if (F.observer) { try { F.observer.disconnect(); } catch (e) { /* ignore */ } F.observer = null; }
-        if (F.timer) { clearTimeout(F.timer); F.timer = null; }
-        F.pending = [];
-    }
-
-    function applyImages() {
-        stopImgObserver();
-        revertImgs();
-        if (!S.features.imgAsync && !S.features.imgLazy) return;
-        if (typeof MutationObserver === 'undefined' || !document.body) return;
-        var existing = document.getElementsByTagName('img');
-        for (var i = 0; i < existing.length && i < 2000; i++) F.pending.push(existing[i]);
-        F.observer = new MutationObserver(function (muts) {
-            for (var a = 0; a < muts.length; a++) {
-                var added = muts[a].addedNodes;
-                for (var b = 0; b < added.length; b++) F.pending.push(added[b]);
-            }
-            if (F.pending.length > 2000) F.pending.splice(0, F.pending.length - 2000);
-            if (!F.timer) F.timer = setTimeout(flushImgs, 80);
-        });
-        F.observer.observe(document.body, { childList: true, subtree: true });
-        if (!F.timer) F.timer = setTimeout(flushImgs, 50);
-    }
-
-    function hostOf(u) { var m = /^(https?:\/\/[^\/?#]+)/i.exec(u || ''); return m ? m[1] : null; }
-
-    // Хосты, которые использует сама Lampa (через её API). Если определить нельзя — сообщаем об этом.
-    function discoverHosts() {
-        var out = [];
-        var seen = {};
-        function add(u) { var h = hostOf(u); if (h && !seen[h]) { seen[h] = 1; out.push(h); } }
-        try {
-            if (window.Lampa && Lampa.TMDB) {
-                if (typeof Lampa.TMDB.api === 'function') add(Lampa.TMDB.api('configuration'));
-                if (typeof Lampa.TMDB.image === 'function') add(Lampa.TMDB.image('t/p/w92/x.jpg'));
-            }
-        } catch (e) { /* ignore */ }
-        try { if (Lampa.Manifest && Lampa.Manifest.cub_domain) add('https://' + Lampa.Manifest.cub_domain); } catch (e2) { /* ignore */ }
-        return out;
-    }
-
-    function applyPreconnect(on) {
-        var olds = document.querySelectorAll('link[data-ao-pc]');
-        for (var i = 0; i < olds.length; i++) if (olds[i].parentNode) olds[i].parentNode.removeChild(olds[i]);
-        if (!on) return;
-        var hosts = discoverHosts();
-        for (var j = 0; j < hosts.length; j++) {
-            var l = document.createElement('link');
-            l.rel = 'preconnect';
-            l.href = hosts[j];
-            l.setAttribute('data-ao-pc', '1');
-            document.head.appendChild(l);
-        }
-    }
-
-    // Идемпотентно приводит страницу в соответствие с S.features.
-    function applyFeatures() {
-        var res = { unsupported: [] };
-        if (typeof document === 'undefined' || !document.head) return res;
-        try {
-            if (S.features.imgAsync && !IMG_DECODING) res.unsupported.push('imgAsync');
-            if (S.features.imgLazy && !IMG_LOADING) res.unsupported.push('imgLazy');
-            applyImages();
-            setStyle('ao-style-backdrop', '*{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}', S.features.noBackdrop);
-            setStyle('ao-style-anim', 'body *{-webkit-animation-duration:.001s!important;animation-duration:.001s!important;-webkit-animation-delay:0s!important;animation-delay:0s!important;-webkit-transition-duration:.001s!important;transition-duration:.001s!important;-webkit-transition-delay:0s!important;transition-delay:0s!important}', S.features.noAnim);
-            applyPreconnect(S.features.preconnect);
+            return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         } catch (e) {
-            addLog('own', 'Ошибка применения функций: ' + (e && e.message), true);
-        }
-        return res;
-    }
-
-    function setProfile(name) {
-        var f = clone(S.features);
-        if (PROFILES[name]) { for (var k in PROFILES[name]) f[k] = PROFILES[name][k]; }
-        else { for (var k2 in f) f[k2] = false; }
-        S.profile = name;
-        S.features = f;
-        saveSettings();
-        return applyFeatures();
-    }
-
-    function featureDiff(before, after) {
-        var out = [];
-        for (var f in FEATURE_NAMES) {
-            if (before[f] !== after[f]) out.push((after[f] ? 'Включено: ' : 'Выключено: ') + FEATURE_NAMES[f]);
-        }
-        return out;
-    }
-
-    /* ======================= Bug Detector ======================= */
-
-    var LT = [];
-    var LT_OK = false;
-    var detectorOn = false;
-
-    function onWinError(e) {
-        try {
-            var t = e && e.target;
-            if (t && t !== window && t.tagName) {
-                var tag = t.tagName;
-                if (tag === 'IMG' || tag === 'SCRIPT' || tag === 'LINK') addLog('resource', tag + ' не загрузился: ' + (t.src || t.href || '?'));
-                return;
-            }
-            var own = !!(SELF_SRC && e && e.filename && String(e.filename).split('?')[0] === SELF_SRC.split('?')[0]);
-            addLog('js', (e && e.message ? e.message : 'Ошибка') + (e && e.filename ? ' @' + String(e.filename).split('/').pop() + ':' + e.lineno : ''), own);
-        } catch (x) { /* ignore */ }
-    }
-
-    function onRejection(e) {
-        try { addLog('promise', 'Необработанный promise: ' + (e && e.reason && (e.reason.message || e.reason))); } catch (x) { /* ignore */ }
-    }
-
-    function startDetector() {
-        if (detectorOn) return;
-        detectorOn = true;
-        window.addEventListener('error', onWinError, true);
-        window.addEventListener('unhandledrejection', onRejection);
-        try {
-            if (typeof PerformanceObserver !== 'undefined') {
-                var po = new PerformanceObserver(function (list) {
-                    var en = list.getEntries();
-                    for (var i = 0; i < en.length; i++) LT.push({ t: Date.now(), d: en[i].duration });
-                    if (LT.length > 100) LT.splice(0, LT.length - 100);
-                });
-                po.observe({ entryTypes: ['longtask'] });
-                LT_OK = true;
-            }
-        } catch (e) { LT_OK = false; }
-    }
-
-    function recentLong(ms) {
-        var from = Date.now() - ms;
-        var c = 0;
-        for (var i = 0; i < LT.length; i++) if (LT[i].t >= from) c++;
-        return c;
-    }
-
-    /* ======================= Device Scanner ======================= */
-
-    function lampaPlatforms() {
-        var out = [];
-        var names = ['tizen', 'webos', 'android', 'browser', 'orsay', 'netcast', 'nw', 'apple', 'apple_tv', 'macos', 'windows'];
-        try {
-            if (window.Lampa && Lampa.Platform && typeof Lampa.Platform.is === 'function') {
-                for (var i = 0; i < names.length; i++) { try { if (Lampa.Platform.is(names[i])) out.push(names[i]); } catch (e) { /* ignore */ } }
-            }
-        } catch (e2) { /* ignore */ }
-        return out;
-    }
-
-    function webglInfo() {
-        try {
-            var c = document.createElement('canvas');
-            var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
-            if (!gl) return { available: false };
-            var info = { available: true, renderer: null, software: false };
-            var ext = gl.getExtension('WEBGL_debug_renderer_info');
-            if (ext) {
-                info.renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
-                info.software = /swiftshader|llvmpipe|software/i.test(String(info.renderer));
-            }
-            return info;
-        } catch (e) { return { available: false }; }
-    }
-
-    function jsFeatures() {
-        var f = {};
-        f['Promise'] = typeof Promise !== 'undefined';
-        f['fetch'] = typeof fetch === 'function';
-        f['AbortController'] = typeof AbortController !== 'undefined';
-        f['MutationObserver'] = typeof MutationObserver !== 'undefined';
-        f['IntersectionObserver'] = typeof IntersectionObserver !== 'undefined';
-        f['PerformanceObserver'] = typeof PerformanceObserver !== 'undefined';
-        f['requestIdleCallback'] = typeof requestIdleCallback === 'function';
-        f['IndexedDB'] = typeof indexedDB !== 'undefined';
-        f['Web Workers'] = typeof Worker !== 'undefined';
-        f['img decoding'] = IMG_DECODING;
-        f['img loading=lazy'] = IMG_LOADING;
-        f['backdrop-filter'] = !!(window.CSS && CSS.supports && (CSS.supports('backdrop-filter', 'blur(1px)') || CSS.supports('-webkit-backdrop-filter', 'blur(1px)')));
-        return f;
-    }
-
-    function scanDevice() {
-        var nav = window.navigator || {};        var ua = nav.userAgent || '';
-        var d = { ua: ua, notes: [] };
-        d.lampaPlatforms = lampaPlatforms();
-        d.lampaVersion = null;
-        try { if (Lampa.Manifest && Lampa.Manifest.app_version) d.lampaVersion = Lampa.Manifest.app_version; } catch (e) { /* ignore */ }
-
-        var m = /Chrom(?:e|ium)\/(\d+)/.exec(ua);
-        var engine = null;
-        if (m) engine = { name: 'Chromium', major: parseInt(m[1], 10) };
-        else if ((m = /Firefox\/(\d+)/.exec(ua))) engine = { name: 'Firefox', major: parseInt(m[1], 10) };
-        else if ((m = /Version\/(\d+).+Safari/.exec(ua))) engine = { name: 'WebKit/Safari', major: parseInt(m[1], 10) };
-        d.engine = engine;
-
-        d.cores = nav.hardwareConcurrency || null;
-        d.deviceMemory = nav.deviceMemory || null;
-        d.screen = {
-            w: window.screen ? screen.width : null, h: window.screen ? screen.height : null,
-            iw: window.innerWidth, ih: window.innerHeight, dpr: window.devicePixelRatio || 1
-        };
-        d.gl = webglInfo();
-        try { d.css3d = !!(window.CSS && CSS.supports && CSS.supports('transform', 'translateZ(0)')); } catch (e2) { d.css3d = null; }
-        d.features = jsFeatures();
-
-        var tv = /Tizen|Web0S|webOS|NetCast|SmartTV|Smart-TV|HbbTV|SMART-TV|Viera|Bravia/i.test(ua) ||
-            d.lampaPlatforms.indexOf('tizen') >= 0 || d.lampaPlatforms.indexOf('webos') >= 0 ||
-            d.lampaPlatforms.indexOf('orsay') >= 0 || d.lampaPlatforms.indexOf('netcast') >= 0;
-        var android = /Android/i.test(ua) || d.lampaPlatforms.indexOf('android') >= 0;
-        var androidTv = android && (/\bTV\b|BRAVIA|AFT|SHIELD|MIBOX|MiBOX|Box/i.test(ua) || (!!window.AndroidJS && !/Mobile/i.test(ua)));
-        var googleTv = androidTv && /Google ?TV|Chromecast|Sabrina/i.test(ua);
-
-        if (!ua) { d.profile = 'Unknown Device'; d.notes.push('User Agent недоступен'); }
-        else if (tv) {
-            var low = (engine && engine.major <= 69) || (d.deviceMemory && d.deviceMemory <= 1);
-            var high = engine && engine.major >= 88 && !low;
-            if (!engine) d.notes.push('Версия движка не определена, класс телевизора принят как средний');
-            d.profile = low ? 'Smart TV Low-End' : high ? 'Smart TV High-End' : 'Smart TV Mid-Range';
-            d.notes.push('Класс ТВ — оценка по версии браузерного движка и доступным API, не точная характеристика железа');
-        } else if (googleTv) { d.profile = 'Google TV'; }
-        else if (androidTv) { d.profile = 'Android TV'; }
-        else if (engine) { d.profile = 'Web Browser'; }
-        else { d.profile = 'Unknown Device'; }
-
-        if (!d.cores) d.notes.push('Число логических ядер браузер не сообщает');
-        if (!d.deviceMemory) d.notes.push('Объём RAM устройства недоступен (navigator.deviceMemory не поддерживается)');
-        d.notes.push('Модель процессора и физическая RAM не определяются: надёжного API нет');
-        return d;
-    }
-
-    function lampaState() {
-        var need = ['Storage', 'Scroll', 'Component', 'Activity', 'Controller', 'Select', 'Noty', 'Listener', 'Menu', 'Platform', 'TMDB', 'Manifest'];
-        var missing = [];
-        for (var i = 0; i < need.length; i++) if (!window.Lampa || !Lampa[need[i]]) missing.push(need[i]);
-        var st = { missing: missing, plugins: null, dupPlugins: 0 };
-        try {
-            var p = Lampa.Storage.get('plugins', '[]');
-            if (typeof p === 'string') p = JSON.parse(p);
-            if (Array.isArray(p)) {
-                st.plugins = p.length;
-                var seen = {};
-                for (var j = 0; j < p.length; j++) {
-                    var u = typeof p[j] === 'string' ? p[j] : (p[j] && p[j].url);
-                    if (!u) continue;
-                    if (seen[u]) st.dupPlugins++; else seen[u] = 1;
-                }
-            }
-        } catch (e) { /* ignore */ }
-        return st;
-    }
-
-    /* ======================= Performance Engine ======================= */
-
-    function yieldThen(fn) { setTimeout(fn, 0); }
-
-    function cpuBench(rounds, cb) {
-        var best = 1e9;
-        var r = 0;
-        (function step() {
-            var t0 = now();
-            var acc = 0;
-            var i;
-            for (i = 0; i < 200000; i++) acc += Math.sqrt(i) * Math.sin(i);
-            var arr = [];
-            for (i = 0; i < 20000; i++) arr.push((i * 7) % 1013);
-            arr.sort(function (a, b) { return a - b; });
-            var dt = now() - t0;
-            if (dt < best) best = dt;
-            if (acc === 42.5) dbg(acc);
-            r++;
-            if (r < rounds) yieldThen(step); else cb(round(best, 1));
-        })();
-    }
-
-    // Синтетический тест отрисовки: двигаем элементы через transform и мерим интервалы кадров.
-    function measureFrames(ms, cb, cancelled) {
-        if (!window.requestAnimationFrame || !document.body) { cb(null); return; }
-        var box = document.createElement('div');
-        box.style.cssText = 'position:fixed;right:0;bottom:0;width:160px;height:40px;opacity:.03;overflow:hidden;pointer-events:none;z-index:1';
-        var els = [];
-        for (var i = 0; i < 60; i++) {
-            var e = document.createElement('div');
-            e.style.cssText = 'position:absolute;top:' + (i % 4) * 10 + 'px;left:0;width:8px;height:8px;background:#fff';
-            box.appendChild(e);
-            els.push(e);
-        }
-        document.body.appendChild(box);
-
-        var d = [];
-        var last = 0;
-        var start = now();
-        var done = false;
-        var guard = setTimeout(function () { finish(); }, ms + 2000);
-
-        function finish() {
-            if (done) return;
-            done = true;
-            clearTimeout(guard);
-            if (box.parentNode) box.parentNode.removeChild(box);
-            if (d.length < 5) { cb(null); return; }
-            var sum = 0, max = 0, jank = 0, longF = 0;
-            for (var k = 0; k < d.length; k++) {
-                sum += d[k];
-                if (d[k] > max) max = d[k];
-                if (d[k] > 33.4) jank++;
-                if (d[k] > 50) longF++;
-            }
-            cb({ n: d.length, avg: round(sum / d.length, 1), max: round(max, 1), jank: jank, longFrames: longF, jankRatio: round(jank / d.length, 3) });
-        }
-
-        function tick() {
-            if (done) return;
-            var t = now();
-            if (last) d.push(t - last);
-            last = t;
-            for (var j = 0; j < els.length; j++) els[j].style.transform = 'translateX(' + ((t / 8 + j * 3) % 150) + 'px)';
-            if ((cancelled && cancelled()) || t - start >= ms) finish();
-            else requestAnimationFrame(tick);
-        }
-        requestAnimationFrame(tick);
-    }
-
-    function domStats() {
-        var all = document.getElementsByTagName('*');
-        var wide = 0;
-        for (var i = 0; i < all.length && i < 20000; i++) if (all[i].childElementCount > 150) wide++;
-        var imgs = document.images;
-        var pending = 0;
-        for (var j = 0; j < imgs.length; j++) if (!imgs[j].complete && imgs[j].getAttribute('src')) pending++;
-        return { nodes: all.length, imgs: imgs.length, pending: pending, wide: wide };
-    }
-
-    function memStats() {
-        var r = { ls: lsUsage() };
-        try {
-            if (performance.memory && performance.memory.jsHeapSizeLimit) {
-                r.used = performance.memory.usedJSHeapSize;
-                r.limit = performance.memory.jsHeapSizeLimit;
-                r.ratio = r.used / r.limit;
-            }
-        } catch (e) { /* ignore */ }
-        if (navigator.deviceMemory) r.device = navigator.deviceMemory;
-        return r;
-    }
-
-    function lsUsage() {
-        var total = 0, own = 0;
-        try {
-            for (var i = 0; i < localStorage.length; i++) {
-                var k = localStorage.key(i);
-                var v = localStorage.getItem(k) || '';
-                var b = (k.length + v.length) * 2;
-                total += b;
-                if (k.indexOf('ao_') === 0) own += b;
-            }
-        } catch (e) { /* ignore */ }
-        return { total: total, own: own };
-    }
-
-    function resStats() {
-        try {
-            if (!performance.getEntriesByType) return null;
-            var e = performance.getEntriesByType('resource');
-            var imgs = [];
-            var counts = {};
-            var tn = now();
-            for (var i = 0; i < e.length; i++) {
-                var en = e[i];
-                if (en.name.indexOf('ao=') >= 0) continue;
-                if (en.initiatorType === 'img' || /\.(jpe?g|png|webp|gif)(\?|$)/i.test(en.name)) imgs.push(en.duration);
-                else if (tn - en.startTime < 60000) counts[en.name] = (counts[en.name] || 0) + 1;
-            }
-            var dup = [];
-            for (var u in counts) if (counts[u] >= 4) dup.push({ url: u, n: counts[u] });
-            dup.sort(function (a, b) { return b.n - a.n; });
-            var sorted = imgs.slice().sort(function (a, b) { return a - b; });
-            var sum = 0;
-            for (var j = 0; j < imgs.length; j++) sum += imgs[j];
-            return {
-                total: e.length, bufferFull: e.length >= 250, imgN: imgs.length,
-                imgAvg: imgs.length ? round(sum / imgs.length, 0) : null,
-                imgP90: imgs.length ? round(sorted[Math.floor(sorted.length * 0.9)] || sorted[sorted.length - 1], 0) : null,
-                dup: dup.slice(0, 3)
-            };
-        } catch (e2) { return null; }
-    }
-
-    /* ======================= Network Optimizer ======================= */
-
-    function probeOnce(host, timeout, cb) {
-        if (typeof fetch !== 'function') { cb({ ok: null }); return; }
-        var t0 = now();
-        var done = false;
-        var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-        var tm = setTimeout(function () {
-            if (done) return;
-            done = true;
-            if (ctrl) { try { ctrl.abort(); } catch (e) { /* ignore */ } }
-            cb({ ok: false, timeout: true });
-        }, timeout);
-        var opts = { method: 'HEAD', mode: 'no-cors', cache: 'no-store' };
-        if (ctrl) opts.signal = ctrl.signal;
-        try {
-            fetch(host + '/?ao=' + Date.now(), opts).then(function () {
-                if (done) return;
-                done = true; clearTimeout(tm);
-                cb({ ok: true, ms: now() - t0 });
-            }, function () {
-                if (done) return;
-                done = true; clearTimeout(tm);
-                cb({ ok: false, timeout: false });
-            });
-        } catch (e2) { done = true; clearTimeout(tm); cb({ ok: null }); }
-    }
-
-    function probeHost(host, samples, retries, cancelled, cb) {
-        var res = { host: host, samples: [], fails: 0, timeouts: 0, unsupported: false };
-        var i = 0;
-        function one(attempt) {
-            if (cancelled && cancelled()) { finish(); return; }
-            probeOnce(host, 8000, function (r) {
-                if (r.ok === null) { res.unsupported = true; finish(); return; }
-                if (r.ok) { res.samples.push(round(r.ms, 0)); next(); return; }
-                if (r.timeout) res.timeouts++;
-                if (attempt < retries) { setTimeout(function () { one(attempt + 1); }, attempt === 0 ? 400 : 1200); }
-                else { res.fails++; next(); }
-            });
-        }
-        function next() { i++; if (i < samples) one(0); else finish(); }
-        function finish() {
-            res.median = median(res.samples);
-            res.ok = res.samples.length > 0;
-            if (res.fails) {
-                addLog('net', 'Хост недоступен: ' + host + (res.timeouts ? ' (таймаут)' : ''));
-                var h = jget(K.net, []);
-                if (!Array.isArray(h)) h = [];
-                h.push({ t: Date.now(), host: host });
-                jset(K.net, h.slice(-50));
-            }
-            cb(res);
-        }
-        one(0);
-    }
-
-    function probeAll(samples, retries, cancelled, cb) {
-        var hosts = discoverHosts();
-        var out = { hosts: [], discovered: hosts.length > 0, unsupported: false };
-        var i = 0;
-        (function next() {
-            if (i >= hosts.length || (cancelled && cancelled())) { cb(out); return; }
-            probeHost(hosts[i++], samples, retries, cancelled, function (r) {
-                if (r.unsupported) out.unsupported = true;
-                out.hosts.push(r);
-                next();
-            });
-        })();
-    }
-
-    function repeatedNetFailures() {
-        var h = jget(K.net, []);
-        if (!Array.isArray(h)) return [];
-        var from = Date.now() - 600000;
-        var c = {};
-        for (var i = 0; i < h.length; i++) if (h[i].t >= from) c[h[i].host] = (c[h[i].host] || 0) + 1;
-        var out = [];
-        for (var k in c) if (c[k] >= 2) out.push(k);
-        return out;
-    }
-
-    /* ======================= измерение целиком, оценка, анализ ======================= */
-
-    // opts: { deep: bool, net: bool }
-    function measure(opts, cancelled, cb) {
-        var m = { t: Date.now(), deep: !!opts.deep };
-        cpuBench(opts.deep ? 3 : 2, function (ms) {
-            m.cpu = { ms: ms };
-            yieldThen(function () {
-                measureFrames(opts.deep ? 3000 : 1200, function (fr) {
-                    m.frames = fr;
-                    m.dom = domStats();
-                    m.mem = memStats();
-                    m.longtasks = { supported: LT_OK, n60: LT_OK ? recentLong(60000) : null };
-                    m.res = resStats();
-                    m.errors = { recent: logCount(['js', 'promise', 'resource'], 600000), own: logCount(['js', 'promise'], 600000, true) };
-                    m.netRepeated = repeatedNetFailures();
-                    if (opts.net && !(cancelled && cancelled())) {
-                        probeAll(opts.deep ? 3 : 1, opts.deep ? 2 : 1, cancelled, function (net) {
-                            m.net = net;
-                            m.score = computeScore(m);
-                            cb(m);
-                        });
-                    } else {
-                        m.net = opts.reuseNet || null;
-                        m.score = computeScore(m);
-                        cb(m);
-                    }
-                }, cancelled);
-            });
-        });
-    }
-
-    // Формула: взвешенное среднее доступных компонентов (веса перенормируются).
-    // frames 35%, cpu 25%, dom 15%, memory 10%, errors 10%, network 5%.
-    // Пороги эвристические и описаны в документации.
-    function computeScore(m) {
-        var parts = {};
-        var w = { frames: 0.35, cpu: 0.25, dom: 0.15, mem: 0.10, err: 0.10, net: 0.05 };
-        if (m.frames) parts.frames = Math.max(0, lin(m.frames.avg, 17, 50) - Math.min(40, m.frames.jankRatio * 150));
-        if (m.cpu) parts.cpu = lin(m.cpu.ms, 20, 250);
-        if (m.dom) parts.dom = lin(m.dom.nodes, 1500, 6000);
-        if (m.mem && typeof m.mem.ratio === 'number') parts.mem = lin(m.mem.ratio, 0.5, 0.9);
-        if (m.errors) parts.err = lin(m.errors.recent, 0, 10);
-        if (m.net && m.net.hosts && m.net.hosts.length) {
-            var meds = [];
-            var failed = 0;
-            for (var i = 0; i < m.net.hosts.length; i++) { if (m.net.hosts[i].ok) meds.push(m.net.hosts[i].median); else failed++; }
-            if (meds.length || failed) {
-                var base = meds.length ? lin(median(meds), 200, 1500) : 0;
-                parts.net = failed ? base * (meds.length / (meds.length + failed)) : base;
-            }
-        }
-        var sum = 0, ws = 0;
-        for (var k in parts) { sum += parts[k] * w[k]; ws += w[k]; }
-        return ws ? Math.round(sum / ws) : null;
-    }
-
-    function scoreLabel(s) {
-        if (s === null || s === undefined) return 'Нет данных';
-        return s >= 85 ? 'Отлично' : s >= 65 ? 'Хорошо' : s >= 45 ? 'Средне' : 'Плохо';
-    }
-
-    var SEV = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
-    var SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
-
-    // fix: ключ функции, которая может смягчить проблему (null — средствами плагина не исправить)
-    function analyze(m, dev) {
-        var is = [];
-        function add(sev, id, text, cause, fix) { is.push({ sev: sev, id: id, text: text, cause: cause, fix: fix || null }); }
-        if (m.frames) {
-            if (m.frames.avg > 50) add('critical', 'frames', 'Средний кадр ' + m.frames.avg + ' мс (меньше 20 к/с)', 'Перегружен главный поток или отрисовка', 'noAnim');
-            else if (m.frames.avg > 33) add('high', 'frames', 'Средний кадр ' + m.frames.avg + ' мс', 'Медленная отрисовка', 'noAnim');
-            else if (m.frames.avg > 22) add('medium', 'frames', 'Средний кадр ' + m.frames.avg + ' мс', 'Нагрузка на отрисовку', 'noBackdrop');
-            if (m.frames.jankRatio > 0.15) add('high', 'jank', 'Пропущено кадров: ' + Math.round(m.frames.jankRatio * 100) + '%', 'Разовые блокировки интерфейса', 'noAnim');
-            else if (m.frames.jankRatio > 0.05) add('medium', 'jank', 'Пропущено кадров: ' + Math.round(m.frames.jankRatio * 100) + '%', 'Периодические подвисания', 'noBackdrop');
-        } else {
-            add('low', 'frames_na', 'Плавность отрисовки измерить не удалось', 'requestAnimationFrame недоступен или приостановлен', null);
-        }
-        if (m.cpu) {
-            if (m.cpu.ms > 250) add('critical', 'cpu', 'Тест скорости JS: ' + m.cpu.ms + ' мс (очень медленно)', 'Слабый процессор или высокая фоновая нагрузка', 'noAnim');
-            else if (m.cpu.ms > 120) add('high', 'cpu', 'Тест скорости JS: ' + m.cpu.ms + ' мс', 'Медленное выполнение JavaScript', 'noAnim');
-            else if (m.cpu.ms > 60) add('medium', 'cpu', 'Тест скорости JS: ' + m.cpu.ms + ' мс', 'Средняя скорость выполнения JavaScript', null);
-        }
-        if (m.dom) {
-            if (m.dom.nodes > 6000) add('high', 'dom', 'Элементов DOM: ' + m.dom.nodes, 'Перегруженная страница. Плагин не может безопасно удалять элементы Lampa', null);
-            else if (m.dom.nodes > 3500) add('medium', 'dom', 'Элементов DOM: ' + m.dom.nodes, 'Много элементов на странице', null);
-            if (m.dom.pending > 40) add('high', 'imgs', 'Незавершённых изображений: ' + m.dom.pending, 'Много одновременных загрузок', 'imgLazy');
-            else if (m.dom.pending > 20) add('medium', 'imgs', 'Незавершённых изображений: ' + m.dom.pending, 'Много одновременных загрузок', 'imgLazy');
-        }
-        if (m.mem && typeof m.mem.ratio === 'number') {
-            var pr = Math.round(m.mem.ratio * 100);
-            if (m.mem.ratio > 0.9) add('critical', 'mem', 'Память JS: ' + pr + '% от лимита', 'Риск вылета. Освободить память Lampa плагин не может', null);
-            else if (m.mem.ratio > 0.75) add('high', 'mem', 'Память JS: ' + pr + '% от лимита', 'Высокое потребление памяти', null);
-            else if (m.mem.ratio > 0.6) add('medium', 'mem', 'Память JS: ' + pr + '% от лимита', 'Повышенное потребление памяти', null);
-        }
-        if (m.longtasks && m.longtasks.supported) {
-            if (m.longtasks.n60 > 10) add('high', 'longtask', 'Длинных задач за минуту: ' + m.longtasks.n60, 'Тяжёлые операции JavaScript', null);
-            else if (m.longtasks.n60 > 3) add('medium', 'longtask', 'Длинных задач за минуту: ' + m.longtasks.n60, 'Тяжёлые операции JavaScript', null);
-        }
-        if (m.errors) {
-            if (m.errors.recent >= 10) add('high', 'errors', 'Ошибок за 10 минут: ' + m.errors.recent, 'Смотрите раздел ERRORS', null);
-            else if (m.errors.recent >= 3) add('medium', 'errors', 'Ошибок за 10 минут: ' + m.errors.recent, 'Смотрите раздел ERRORS', null);
-            else if (m.errors.recent >= 1) add('low', 'errors', 'Ошибок за 10 минут: ' + m.errors.recent, 'Смотрите раздел ERRORS', null);
-        }
-        if (m.net && m.net.hosts) {
-            var failed = 0;
-            for (var i = 0; i < m.net.hosts.length; i++) {
-                var h = m.net.hosts[i];
-                if (!h.ok) { failed++; add(m.net.hosts.length === 1 || failed === m.net.hosts.length ? 'critical' : 'high', 'net_' + h.host, 'Хост недоступен: ' + h.host, 'Сеть, DNS или блокировка. Плагин сеть не меняет', null); }
-                else if (h.median > 1500) add('high', 'net_slow_' + h.host, 'Медленный ответ ' + h.host + ': ' + h.median + ' мс', 'Медленная сеть или сервер', null);
-                else if (h.median > 700) add('medium', 'net_slow_' + h.host, 'Ответ ' + h.host + ': ' + h.median + ' мс', 'Задержка сети', null);
-            }
-        }        if (m.netRepeated && m.netRepeated.length) add('medium', 'net_repeat', 'Повторяющиеся сетевые ошибки: ' + m.netRepeated.join(', '), 'Нестабильное соединение', null);
-        if (m.res) {
-            if (m.res.imgAvg && m.res.imgAvg > 1500) add('medium', 'img_slow', 'Изображения грузятся в среднем ' + m.res.imgAvg + ' мс', 'Медленная сеть или CDN. Влиять на них плагин не может', null);
-            if (m.res.dup && m.res.dup.length) add('medium', 'dup_req', 'Возможные повторные запросы (' + m.res.dup[0].n + ' раз за минуту)', 'Приложение или плагин многократно запрашивает один URL. Перехват запросов плагин не ведёт', null);
-        }
-        is.sort(function (a, b) { return SEV_ORDER[a.sev] - SEV_ORDER[b.sev]; });
-        return is;
-    }
-
-    function chooseProfile(m, dev) {
-        var reasons = [];
-        var eco = false, bal = false;
-        if (m.frames && m.frames.avg > 33) { eco = true; reasons.push('кадр ' + m.frames.avg + ' мс'); }
-        if (m.frames && m.frames.jankRatio > 0.10) { eco = true; reasons.push('пропуски кадров ' + Math.round(m.frames.jankRatio * 100) + '%'); }
-        if (m.cpu && m.cpu.ms > 90) { eco = true; reasons.push('медленный JS (' + m.cpu.ms + ' мс)'); }
-        if (m.mem && m.mem.ratio > 0.8) { eco = true; reasons.push('память JS ' + Math.round(m.mem.ratio * 100) + '%'); }
-        if (dev && dev.profile === 'Smart TV Low-End') { eco = true; reasons.push('ТВ класса Low-End'); }
-        if (!eco) {
-            if (m.frames && m.frames.avg > 20) { bal = true; reasons.push('кадр ' + m.frames.avg + ' мс'); }
-            if (m.cpu && m.cpu.ms > 40) { bal = true; reasons.push('JS ' + m.cpu.ms + ' мс'); }
-            if (m.dom && m.dom.nodes > 3500) { bal = true; reasons.push('DOM ' + m.dom.nodes + ' элементов'); }
-            if (dev && dev.profile === 'Smart TV Mid-Range') { bal = true; reasons.push('ТВ класса Mid-Range'); }
-        }
-        var p = eco ? 'eco' : bal ? 'balanced' : 'performance';
-        if (!reasons.length) reasons.push('замеры хорошие');
-        return { profile: p, reasons: reasons };
-    }
-
-    /* ======================= Auto Repair ======================= */
-
-    function selfCheckAndRepair() {
-        var r = { found: [], fixed: [], unresolved: [] };
-        var i;
-
-        // 1. повреждённые собственные ключи
-        var keys = [K.settings, K.snap, K.log, K.net, K.last, K.clean];
-        for (i = 0; i < keys.length; i++) {
-            var raw = null;
-            try { raw = localStorage.getItem(keys[i]); } catch (e) { raw = null; }
-            if (raw === null) continue;
-            try { JSON.parse(raw); } catch (e2) {
-                r.found.push('Повреждены данные ' + keys[i]);
-                try { localStorage.removeItem(keys[i]); r.fixed.push('Удалены повреждённые данные ' + keys[i]); if (keys[i] === K.log) logBuf = []; }
-                catch (e3) { r.unresolved.push('Не удалось удалить ' + keys[i]); }
-            }
-        }
-        corruptKeys = [];
-
-        // 2. некорректные собственные настройки
-        if (settingsWereInvalid || !validSettings(S)) {
-            r.found.push('Несовместимые настройки плагина');
-            pushSnapshot('Перед сбросом настроек');
-            S = defaults();
-            saveSettings();
-            applyFeatures();
-            settingsWereInvalid = false;
-            r.fixed.push('Настройки плагина сброшены к стандартным');
-        }
-
-        // 3. дубли собственных элементов
-        try {
-            var links = document.querySelectorAll('link[data-ao-pc]');
-            var expected = S.features.preconnect ? discoverHosts().length : 0;
-            if (links.length !== expected) {
-                r.found.push('Неверное число preconnect-ссылок плагина (' + links.length + ' вместо ' + expected + ')');
-                applyPreconnect(S.features.preconnect);
-                r.fixed.push('Preconnect-ссылки плагина пересозданы');
-            }
-            var items = [];
-            var texts = document.querySelectorAll('.menu__text');
-            for (i = 0; i < texts.length; i++) if (texts[i].textContent === TITLE) items.push(texts[i]);
-            if (items.length > 1) {
-                r.found.push('Дубли пункта меню: ' + items.length);
-                for (i = 1; i < items.length; i++) {
-                    var li = items[i].parentNode;
-                    if (li && li.parentNode) li.parentNode.removeChild(li);
-                }
-                r.fixed.push('Лишние пункты меню плагина удалены');
-            }
-        } catch (e4) { r.unresolved.push('Проверка DOM не выполнена: ' + (e4 && e4.message)); }
-
-        // 4. перезапуск зависшего модуля изображений
-        if ((S.features.imgAsync || S.features.imgLazy) && !F.observer && typeof MutationObserver !== 'undefined') {
-            r.found.push('Модуль обработки изображений не запущен');
-            applyImages();
-            r.fixed.push('Модуль обработки изображений перезапущен');
-        }
-
-        // 5. отключение проблемной функции при собственных ошибках
-        var own = logCount(['js', 'promise'], 600000, true);
-        if (own >= 3) {
-            r.found.push('Собственные ошибки плагина: ' + own);
-            pushSnapshot('Перед отключением функций');
-            for (var f in S.features) S.features[f] = false;
-            S.profile = 'none';
-            saveSettings();
-            applyFeatures();
-            r.fixed.push('Функции плагина отключены, профиль можно вернуть из снимка');
-        }
-
-        // 6. проверка записи в хранилище
-        var tmp = TMP_PREFIX + 'test';
-        try {
-            localStorage.setItem(tmp, '1');
-            var ok = localStorage.getItem(tmp) === '1';
-            localStorage.removeItem(tmp);
-            if (!ok) throw new Error('read mismatch');
-        } catch (e5) {
-            r.found.push('Ошибка записи в localStorage');
-            r.unresolved.push('Хранилище недоступно для записи: плагин не может сохранять настройки и журнал');
-            addLog('storage', 'Ошибка записи в localStorage');
-        }
-
-        // 7. состояние Lampa
-        var ls = lampaState();
-        if (ls.dupPlugins > 0) { r.found.push('Дубли плагинов в списке Lampa: ' + ls.dupPlugins); r.unresolved.push('Дубли плагинов в списке Lampa: удалить можно через Lampa Cleaner или «Расширения»'); }
-        if (ls.missing.length) { r.found.push('Не найдены API Lampa: ' + ls.missing.join(', ')); r.unresolved.push('В этой версии Lampa нет: ' + ls.missing.join(', ')); }
-
-        for (i = 0; i < r.fixed.length; i++) addLog('repair', r.fixed[i]);
-        return r;
-    }
-
-    /* ======================= Cache Manager ======================= */
-
-    function ownKeys() {
-        var out = [];
-        try {
-            for (var i = 0; i < localStorage.length; i++) {
-                var k = localStorage.key(i);
-                if (k.indexOf('ao_') === 0) out.push({ key: k, bytes: (k.length + (localStorage.getItem(k) || '').length) * 2 });
-            }
-        } catch (e) { /* ignore */ }
-        out.sort(function (a, b) { return b.bytes - a.bytes; });
-        return out;
-    }
-
-    function cleanSafe() {
-        var actions = [];
-        var before = lsUsage().own;
-        var l = loadLog();
-        var from = Date.now() - 7 * DAY;
-        var kept = l.filter(function (e) { return e.t >= from; });
-        if (kept.length > 100) kept = kept.slice(-100);
-        if (kept.length !== l.length) { actions.push('Журнал: удалено записей ' + (l.length - kept.length)); logBuf = kept; jset(K.log, kept); }
-
-        var net = jget(K.net, []);
-        if (Array.isArray(net)) {
-            var nk = net.filter(function (e) { return e.t >= Date.now() - 3600000; });
-            if (nk.length !== net.length) { actions.push('История сети: удалено записей ' + (net.length - nk.length)); jset(K.net, nk); }
-        }
-        var snaps = getSnaps();
-        if (snaps.length > 5) { jset(K.snap, snaps.slice(0, 5)); actions.push('Снимки: оставлено 5 последних'); }
-
-        var keys = ownKeys();
-        for (var i = 0; i < keys.length; i++) {
-            if (keys[i].key.indexOf(TMP_PREFIX) === 0) { try { localStorage.removeItem(keys[i].key); actions.push('Удалён временный ключ ' + keys[i].key); } catch (e) { /* ignore */ } }
-        }
-        if (lsUsage().own > OWN_LIMIT) {
-            var l2 = loadLog().slice(-30);
-            logBuf = l2; jset(K.log, l2);
-            actions.push('Журнал сокращён до 30 записей (превышен лимит ' + fmtBytes(OWN_LIMIT) + ')');
-        }
-        jset(K.clean, Date.now());
-        var freed = Math.max(0, before - lsUsage().own);
-        if (actions.length) addLog('repair', 'Очистка собственных данных: освобождено ' + fmtBytes(freed));
-        return { actions: actions, freed: freed };
-    }
-
-    var schedulerTimer = null;
-    function startScheduler() {
-        if (schedulerTimer) return;
-        function check() {
-            if (!S.autoClean) return;
-            var last = jget(K.clean, 0);
-            if (typeof last !== 'number' || Date.now() - last > DAY) cleanSafe();
-        }
-        check();
-        schedulerTimer = setInterval(check, 3600000);
-    }
-
-    /* ======================= Smart Optimization ======================= */
-
-    var lastMeasure = null;
-    var lastReport = null;
-
-    function saveLast() { jset(K.last, { measure: lastMeasure, report: lastReport }); }
-
-    function loadLast() {
-        var v = jget(K.last, null);
-        if (v && typeof v === 'object') { lastMeasure = v.measure || null; lastReport = v.report || null; }
-    }
-
-    // ctl: { p(percent, text), cancelled() }
-    function runFull(ctl, done) {
-        var rep = { t: Date.now(), kind: 'full', issuesBefore: [], issuesAfter: [], fixedRepair: [], applied: [], unresolved: [], profile: null, reasons: [], before: null, after: null, reverted: false, cancelled: false, snapId: null, notes: [] };
-        var dev = null, mBefore = null;
-
-        function abort() {
-            rep.cancelled = true;
-            if (rep.snapId) { restoreSnapshot(rep.snapId); rep.reverted = true; }
-            done(rep);
-        }
-        function guard(fn) { return function () { if (ctl.cancelled()) { abort(); return; } fn.apply(null, arguments); }; }
-
-        var s1 = guard(function () {
-            ctl.p(4, 'Сканирование устройства');
-            dev = scanDevice();
-            rep.device = dev.profile;
-            ctl.p(10, 'Проверка состояния Lampa');
-            var ls = lampaState();
-            if (ls.missing.length) rep.notes.push('В Lampa нет API: ' + ls.missing.join(', '));
-            yieldThen(s2);
-        });
-        var s2 = guard(function () {
-            ctl.p(16, 'Самодиагностика и безопасные исправления');
-            var r = selfCheckAndRepair();
-            rep.fixedRepair = r.fixed;
-            rep.unresolved = rep.unresolved.concat(r.unresolved);
-            yieldThen(s3);
-        });
-        var s3 = guard(function () {
-            ctl.p(24, 'Измерение производительности (до)');
-            measure({ deep: true, net: true }, ctl.cancelled, guard(function (m) {
-                mBefore = m; rep.before = m.score; lastMeasure = m;
-                ctl.p(55, 'Анализ причин проблем');
-                rep.issuesBefore = analyze(m, dev);
-                yieldThen(s4);
-            }));
-        });
-        var s4 = guard(function () {
-            var ch = chooseProfile(mBefore, dev);
-            rep.profile = ch.profile;
-            rep.reasons = ch.reasons;
-            ctl.p(62, 'Выбор профиля: ' + PROFILE_NAMES[ch.profile]);
-            var target = clone(PROFILES[ch.profile]);
-            var same = true;
-            for (var f in target) if (S.features[f] !== target[f]) same = false;
-            if (same && S.profile === ch.profile) {
-                rep.notes.push('Профиль ' + PROFILE_NAMES[ch.profile] + ' уже применён, новых изменений нет');
-                yieldThen(s6);
-                return;
-            }
-            ctl.p(66, 'Резервная копия настроек плагина');
-            var snap = pushSnapshot('Перед AUTO OPTIMIZER');
-            rep.snapId = snap.id;
-            ctl.p(70, 'Применение оптимизации');
-            var oldFeatures = clone(S.features);
-            var res = setProfile(ch.profile);
-            rep.applied = featureDiff(oldFeatures, S.features);
-            if (res.unsupported.length) {
-                for (var u = 0; u < res.unsupported.length; u++) rep.notes.push('Не поддерживается этим устройством: ' + FEATURE_NAMES[res.unsupported[u]]);
-            }
-            setTimeout(guard(s5), 1200);
-        });
-        var s5 = guard(function () {
-            ctl.p(76, 'Повторное измерение (после)');
-            measure({ deep: true, net: false, reuseNet: mBefore.net }, ctl.cancelled, guard(function (m) {
-                rep.after = m.score; lastMeasure = m;
-                rep.issuesAfter = analyze(m, dev);
-                ctl.p(94, 'Сравнение результатов');
-                if (rep.before !== null && rep.after !== null && rep.after < rep.before) {
-                    restoreSnapshot(rep.snapId);
-                    rep.reverted = true;
-                    rep.notes.push('Оценка после оптимизации (' + rep.after + ') ниже исходной (' + rep.before + '): изменения откатаны');
-                }
-                yieldThen(s6);
-            }));
-        });
-        var s6 = guard(function () {
-            if (!rep.after && rep.after !== 0) { rep.after = rep.before; rep.issuesAfter = rep.issuesBefore; }
-            cleanSafe();
-            var open = [];
-            for (var i = 0; i < rep.issuesAfter.length; i++) open.push(rep.issuesAfter[i]);
-            rep.unresolvedIssues = open;
-            lastReport = rep;
-            saveLast();
-            ctl.p(100, 'Готово');
-            addLog('repair', 'AUTO OPTIMIZER: ' + rep.before + ' → ' + rep.after + ', профиль ' + PROFILE_NAMES[S.profile] + (rep.reverted ? ' (откат)' : ''));
-            done(rep);
-        });
-        s1();
-    }
-
-    function runScan(deep, ctl, done) {
-        ctl.p(5, 'Сканирование устройства');
-        var dev = scanDevice();
-        var ls = lampaState();
-        ctl.p(15, deep ? 'Глубокая диагностика: измерения' : 'Быстрое сканирование: измерения');
-        measure({ deep: deep, net: true }, ctl.cancelled, function (m) {
-            lastMeasure = m;
-            var rep = { t: Date.now(), kind: deep ? 'deep' : 'quick', device: dev.profile, before: m.score, after: null, issuesBefore: analyze(m, dev), profile: S.profile, applied: [], fixedRepair: [], unresolved: [], notes: ls.missing.length ? ['В Lampa нет API: ' + ls.missing.join(', ')] : [] };
-            lastReport = rep;
-            saveLast();
-            ctl.p(100, 'Готово');
-            done(rep);
-        });
-    }
-
-    /* ======================= интерфейс ======================= */
-
-    var CSS_UI = '' +
-        '.ao{padding:1.5em 2em 2em 2em}' +
-        '.ao__top{display:flex;align-items:center;margin-bottom:1.2em}' +
-        '.ao__ring{width:11em;height:11em;flex-shrink:0;position:relative}' +
-        '.ao__ring svg{width:100%;height:100%;transform:rotate(-90deg)}' +
-        '.ao__num{position:absolute;left:0;top:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}' +
-        '.ao__num b{font-size:3em;font-weight:300;line-height:1}' +
-        '.ao__num span{opacity:.6;font-size:1em;margin-top:.2em}' +
-        '.ao__info{margin-left:2em;min-width:0}' +
-        '.ao__title{font-size:2em;font-weight:300}' +
-        '.ao__state{font-size:1.5em;margin:.2em 0}' +
-        '.ao__meta{opacity:.6;font-size:1.1em;margin-top:.2em}' +
-        '.ao__prog{height:.5em;background:rgba(255,255,255,.12);border-radius:.3em;margin:.8em 0 .4em 0;overflow:hidden}' +
-        '.ao__prog i{display:block;height:100%;width:0;background:#4caf50}' +
-        '.ao__step{opacity:.8;font-size:1.1em;min-height:1.4em;margin-bottom:.8em}' +
-        '.ao__grid{display:flex;flex-wrap:wrap;margin:0 -.3em}' +
-        '.ao-btn{margin:.3em;padding:.9em 1.4em;border-radius:.8em;background:rgba(255,255,255,.08);font-size:1.2em;min-width:11em;text-align:center}' +
-        '.ao-btn.focus{background:#fff;color:#000}' +
-        '.ao-btn.ao-main{background:rgba(76,175,80,.45);font-weight:bold}' +
-        '.ao-btn.ao-main.focus{background:#4caf50;color:#fff}' +
-        '.ao-btn.ao-dim{opacity:.45}' +
-        '.ao__sec{font-size:1.3em;margin:1.2em 0 .5em 0;opacity:.85}' +
-        '.ao-row{display:flex;justify-content:space-between;padding:.7em 1em;margin-bottom:.35em;border-radius:.6em;background:rgba(255,255,255,.06);font-size:1.15em}' +
-        '.ao-row.focus{background:#fff;color:#000}' +
-        '.ao-row .l{opacity:.7;margin-right:1em}' +
-        '.ao-row .v{text-align:right;min-width:0}' +
-        '.ao-sev{display:inline-block;padding:.1em .6em;border-radius:1em;font-size:.85em;margin-right:.6em;color:#fff}' +
-        '.ao-sev.critical{background:#c62828}.ao-sev.high{background:#ef6c00}.ao-sev.medium{background:#f9a825;color:#000}.ao-sev.low{background:#607d8b}' +
-        '.ao-ok{color:#66bb6a}.ao-bad{color:#ef5350}' +
-        '.ao-row.focus .ao-ok{color:#2e7d32}.ao-row.focus .ao-bad{color:#c62828}' +
-        '.ao__note{opacity:.55;font-size:1em;margin:.8em 0}';
-
-    function injectCss() {
-        if (document.getElementById('ao-ui-css')) return;
-        var st = document.createElement('style');
-        st.id = 'ao-ui-css';
-        st.appendChild(document.createTextNode(CSS_UI));
-        document.head.appendChild(st);
-    }
-
-    function select(title, items, onSelect) {
-        Lampa.Select.show({
-            title: title, items: items,
-            onSelect: function (it) { setTimeout(function () { onSelect(it); }, 30); },
-            onBack: function () { Lampa.Controller.toggle(COMPONENT); }
-        });
-    }
-
-    function confirmDialog(title, details, yes, onYes) {
-        select(title, [
-            { title: 'Отмена', subtitle: 'Ничего не изменится', selected: true, v: 0 },
-            { title: yes, subtitle: details, v: 1 }
-        ], function (it) { if (it.v === 1) onYes(); else Lampa.Controller.toggle(COMPONENT); });
-    }
-
-    function Component() {
-        var self = this;
-        var scroll = new Lampa.Scroll({ mask: true, over: true });
-        var html = $('<div class="ao"></div>');
-        var body = $('<div class="ao__body"></div>');
-        var view = 'home';
-        var focusKey = null;
-        var destroyed = false;
-        var busy = false;
-        var cancel = false;
-        var prog = { p: 0, text: '' };
-        var progEl = null, stepEl = null;
-
-        function btn(key, text, fn, cls) {
-            var el = $('<div class="ao-btn selector"></div>').text(text).attr('data-key', key);
-            if (cls) el.addClass(cls);
-            el.on('hover:focus', function () { focusKey = key; scroll.update(el, true); });
-            el.on('hover:enter', function () {
-                if (busy && !(cls && cls.indexOf('ao-always') >= 0)) { noty('Подождите, идёт работа. Кнопка «Назад» отменяет её.'); return; }
-                fn();
-            });
-            return el;
-        }
-
-        function row(key, label, value, cls) {
-            var el = $('<div class="ao-row selector"></div>').attr('data-key', key);
-            el.append($('<div class="l"></div>').text(label));
-            var v = $('<div class="v"></div>').text(value);
-            if (cls) v.addClass(cls);
-            el.append(v);
-            el.on('hover:focus', function () { focusKey = key; scroll.update(el, true); });
-            return el;
-        }
-
-        function issueRow(key, is) {
-            var el = $('<div class="ao-row selector"></div>').attr('data-key', key);
-            var l = $('<div class="l"></div>');
-            l.append($('<span class="ao-sev"></span>').addClass(is.sev).text(SEV[is.sev]));
-            l.append(document.createTextNode(is.text));
-            el.append(l);
-            el.append($('<div class="v"></div>').text(is.cause));
-            el.on('hover:focus', function () { focusKey = key; scroll.update(el, true); });
-            return el;
-        }
-        function ctl() {
-            return {
-                p: function (p, t) {
-                    prog.p = p; prog.text = t;
-                    if (progEl) progEl.css('width', p + '%');
-                    if (stepEl) stepEl.text(t + ' · ' + Math.round(p) + '%');
-                },
-                cancelled: function () { return cancel || destroyed; }
-            };
-        }
-
-        function run(fn) {
-            if (busy) return;
-            busy = true; cancel = false; prog = { p: 0, text: 'Запуск' };
-            self.draw();
-            fn(ctl(), function (rep) {
-                busy = false;
-                if (destroyed) return;
-                if (rep && rep.cancelled) noty('Операция отменена' + (rep.reverted ? ', изменения откатаны' : ''));
-                view = rep && !rep.cancelled ? (rep.goto || (rep.kind ? 'report' : 'home')) : 'home';
-                self.draw();
-            });
-        }
-
-        function ring() {
-            var sc = lastMeasure ? lastMeasure.score : null;
-            var C = 2 * Math.PI * 84;
-            var off = sc === null ? C : C * (1 - sc / 100);
-            var color = sc === null ? '#607d8b' : sc >= 85 ? '#4caf50' : sc >= 65 ? '#8bc34a' : sc >= 45 ? '#ffb300' : '#e53935';
-            var w = $('<div class="ao__ring"></div>');
-            w.html('<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="84" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="14"></circle>' +
-                '<circle cx="100" cy="100" r="84" fill="none" stroke="' + color + '" stroke-width="14" stroke-linecap="round" stroke-dasharray="' + C + '" stroke-dashoffset="' + off + '"></circle></svg>');
-            var num = $('<div class="ao__num"></div>');
-            num.append($('<b></b>').text(sc === null ? '—' : sc));
-            num.append($('<span></span>').text('Performance Score'));
-            w.append(num);
-            return w;
-        }
-
-        function homeView() {
-            var top = $('<div class="ao__top"></div>');
-            top.append(ring());
-            var info = $('<div class="ao__info"></div>');
-            info.append($('<div class="ao__title"></div>').text(TITLE));
-            var sc = lastMeasure ? lastMeasure.score : null;
-            info.append($('<div class="ao__state"></div>').text(sc === null ? 'Данных пока нет. Запустите QUICK SCAN' : scoreLabel(sc)));
-            info.append($('<div class="ao__meta"></div>').text('Профиль: ' + PROFILE_NAMES[S.profile] + (lastMeasure ? ' · замер ' + fmtTime(lastMeasure.t) : '')));
-            if (busy) {
-                var pr = $('<div class="ao__prog"><i></i></div>');
-                progEl = pr.find('i').css('width', prog.p + '%');
-                stepEl = $('<div class="ao__step"></div>').text(prog.text + ' · ' + Math.round(prog.p) + '%');
-                info.append(pr).append(stepEl);
-            }
-            top.append(info);
-            body.append(top);
-
-            var g = $('<div class="ao__grid"></div>');
-            g.append(btn('full', 'FULL OPTIMIZATION', function () { run(runFull); }, 'ao-main'));
-            g.append(btn('quick', 'QUICK SCAN', function () { run(function (c, d) { runScan(false, c, d); }); }));
-            g.append(btn('deep', 'DEEP DIAGNOSTICS', function () { run(function (c, d) { runScan(true, c, function (r) { r.goto = 'diag'; d(r); }); }); }));
-            g.append(btn('repair', 'AUTO REPAIR', doRepair));
-            g.append(btn('cache', 'CACHE MANAGER', function () { view = 'cache'; self.draw(); }));
-            g.append(btn('device', 'DEVICE INFO', function () { view = 'device'; self.draw(); }));
-            g.append(btn('diagv', 'ДИАГНОСТИКА', function () { view = 'diag'; self.draw(); }));
-            g.append(btn('profile', 'ПРОФИЛЬ', profileMenu));
-            g.append(btn('log', 'ЖУРНАЛ', function () { view = 'log'; self.draw(); }));
-            if (lastReport) g.append(btn('report', 'ПОСЛЕДНИЙ ОТЧЁТ', function () { view = 'report'; self.draw(); }));
-            if (getSnaps().length) g.append(btn('undo', 'ВОССТАНОВИТЬ НАСТРОЙКИ', undoMenu));
-            body.append(g);
-            body.append($('<div class="ao__note"></div>').text('Плагин меняет только собственный профиль (изображения, анимации, размытие). Кэш ТВ, данные Lampa и сеть не затрагиваются. Любое изменение можно откатить.'));
-        }
-
-        function doRepair() {
-            var r = selfCheckAndRepair();
-            lastReport = { t: Date.now(), kind: 'repair', device: null, before: null, after: null, issuesBefore: [], profile: S.profile, applied: [], fixedRepair: r.fixed, unresolved: r.unresolved, found: r.found, notes: r.found.length ? [] : ['Проблем не найдено'] };
-            saveLast();
-            view = 'report';
-            self.draw();
-        }
-
-        function profileMenu() {
-            var items = [
-                { title: 'Автоматически (после диагностики)', subtitle: 'Запустит FULL OPTIMIZATION', v: 'auto' },
-                { title: 'ECO MODE', subtitle: 'Минимум анимаций, lazy-загрузка, без размытия', v: 'eco' },
-                { title: 'BALANCED MODE', subtitle: 'Lazy-загрузка, без размытия, preconnect', v: 'balanced' },
-                { title: 'PERFORMANCE MODE', subtitle: 'Async-декодирование, preconnect, эффекты сохранены', v: 'performance' },
-                { title: 'Отключить все функции плагина', subtitle: 'Вернуть вид Lampa как был', v: 'none' }
-            ];
-            for (var i = 0; i < items.length; i++) if (items[i].v === S.profile) items[i].selected = true;
-            select('Профиль', items, function (it) {
-                if (it.v === 'auto') { Lampa.Controller.toggle(COMPONENT); run(runFull); return; }
-                pushSnapshot('Перед сменой профиля');
-                var res = setProfile(it.v);
-                noty('Профиль: ' + PROFILE_NAMES[it.v] + (res.unsupported.length ? ' (часть функций не поддерживается устройством)' : ''));
-                view = 'home';
-                self.draw();
-            });
-        }
-
-        function undoMenu() {
-            var snaps = getSnaps();
-            select('Восстановить настройки', snaps.map(function (s, i) {
-                return { title: fmtTime(s.t) + ' · ' + PROFILE_NAMES[s.settings.profile], subtitle: s.reason, idx: i, selected: i === 0 };
-            }), function (it) {
-                var s = snaps[it.idx];
-                confirmDialog('Вернуть настройки от ' + fmtTime(s.t) + '?', 'Профиль: ' + PROFILE_NAMES[s.settings.profile] + '. Текущие настройки тоже сохранятся', 'Да, вернуть', function () {
-                    noty(restoreSnapshot(s.id) ? 'Настройки восстановлены' : 'Не удалось восстановить');
-                    view = 'home';
-                    self.draw();
-                });
-            });
-        }
-
-        function backBtn() { return btn('back', '← Назад', function () { view = 'home'; self.draw(); }); }
-
-        function diagView() {
-            body.append(backBtn());
-            var m = lastMeasure;
-            if (!m) { body.append($('<div class="ao__note"></div>').text('Измерений ещё не было. Запустите QUICK SCAN или DEEP DIAGNOSTICS.')); return; }
-            var dev = scanDevice();
-            body.append($('<div class="ao__sec"></div>').text('CPU'));
-            body.append(row('c1', 'Тест скорости JS (лучший из раундов)', m.cpu ? m.cpu.ms + ' мс' : 'нет данных'));
-            body.append(row('c2', 'Логические ядра (по данным браузера)', dev.cores ? String(dev.cores) : 'недоступно'));
-            body.append($('<div class="ao__note"></div>').text('Модель и загрузка процессора недоступны: надёжного API нет.'));
-
-            body.append($('<div class="ao__sec"></div>').text('MEMORY'));
-            body.append(row('m1', 'Память JS (heap)', m.mem && typeof m.mem.ratio === 'number' ? fmtBytes(m.mem.used) + ' из ' + fmtBytes(m.mem.limit) + ' (' + Math.round(m.mem.ratio * 100) + '%)' : 'API недоступен на этом устройстве'));
-            body.append(row('m2', 'RAM устройства (округлённо)', m.mem && m.mem.device ? '≈ ' + m.mem.device + ' ГБ' : 'недоступно'));
-            body.append(row('m3', 'localStorage: всего / плагин', m.mem ? fmtBytes(m.mem.ls.total) + ' / ' + fmtBytes(m.mem.ls.own) : '—'));
-
-            body.append($('<div class="ao__sec"></div>').text('NETWORK'));
-            if (!m.net) body.append(row('n0', 'Сетевые тесты', 'не выполнялись'));
-            else if (!m.net.hosts.length) body.append(row('n0', 'Хосты Lampa', 'определить не удалось (нет Lampa.TMDB)'));
-            else m.net.hosts.forEach(function (h, i) {
-                body.append(row('n' + i, h.host, h.ok ? 'отклик ' + h.median + ' мс' + (h.fails ? ', сбоев ' + h.fails : '') : (h.unsupported ? 'fetch недоступен' : 'недоступен'), h.ok ? 'ao-ok' : 'ao-bad'));
-            });
-            if (m.res && m.res.imgN) body.append(row('n_img', 'Загрузка изображений (среднее / p90)', m.res.imgAvg + ' / ' + m.res.imgP90 + ' мс, замеров ' + m.res.imgN));
-            body.append($('<div class="ao__note"></div>').text('Проверка делает HEAD-запрос к корню хоста без данных пользователя; содержимое ответа недоступно (CORS), измеряется только время.'));
-
-            body.append($('<div class="ao__sec"></div>').text('INTERFACE'));
-            if (m.frames) {
-                body.append(row('i1', 'Кадр: среднее / максимум', m.frames.avg + ' / ' + m.frames.max + ' мс'));
-                body.append(row('i2', 'Пропущенных кадров', m.frames.jank + ' из ' + m.frames.n + ' (' + Math.round(m.frames.jankRatio * 100) + '%)'));
-            } else body.append(row('i1', 'Плавность отрисовки', 'измерить не удалось'));
-            body.append(row('i3', 'Длинные задачи за минуту', m.longtasks && m.longtasks.supported ? String(m.longtasks.n60) : 'API не поддерживается'));
-            body.append(row('i4', 'Элементов DOM / широких контейнеров', m.dom.nodes + ' / ' + m.dom.wide));
-            body.append(row('i5', 'Изображений / не завершено', m.dom.imgs + ' / ' + m.dom.pending));
-            body.append($('<div class="ao__note"></div>').text('Плавность — синтетический тест отрисовки. Время открытия главной страницы и карточек плагин не измеряет.'));
-
-            body.append($('<div class="ao__sec"></div>').text('ERRORS'));
-            var issues = analyze(m, dev);
-            if (!issues.length) body.append(row('e0', 'Проблем по замерам', 'не найдено', 'ao-ok'));
-            issues.forEach(function (is, i) { body.append(issueRow('e' + i, is)); });
-            var l = loadLog().slice(-5).reverse();
-            l.forEach(function (e, i) { body.append(row('el' + i, fmtTime(e.t) + ' · ' + e.type, e.msg + (e.n > 1 ? ' ×' + e.n : ''))); });
-
-            body.append($('<div class="ao__sec"></div>').text('OPTIMIZATION'));
-            body.append(row('o0', 'Профиль', PROFILE_NAMES[S.profile]));
-            for (var f in FEATURE_NAMES) {
-                var unsup = (f === 'imgAsync' && !IMG_DECODING) || (f === 'imgLazy' && !IMG_LOADING);
-                body.append(row('o_' + f, FEATURE_NAMES[f], unsup ? 'не поддерживается' : (S.features[f] ? 'включено' : 'выключено'), S.features[f] && !unsup ? 'ao-ok' : ''));
-            }
-            body.append($('<div class="ao__note"></div>').text('Score = взвешенное среднее: отрисовка 35%, JS 25%, DOM 15%, память 10%, ошибки 10%, сеть 5% (недоступные части исключаются). Пороги эвристические.'));
-        }
-
-        function deviceView() {
-            body.append(backBtn());
-            var d = scanDevice();
-            var rows = [
-                ['Профиль устройства', d.profile],
-                ['Платформа (по Lampa)', d.lampaPlatforms.length ? d.lampaPlatforms.join(', ') : 'не определена'],
-                ['Версия Lampa', d.lampaVersion || 'недоступна'],
-                ['Движок', d.engine ? d.engine.name + ' ' + d.engine.major : 'не определён'],
-                ['Экран / окно', d.screen.w + '×' + d.screen.h + ' / ' + d.screen.iw + '×' + d.screen.ih + ' @' + d.screen.dpr + 'x'],
-                ['Аппаратное ускорение (WebGL)', d.gl.available ? (d.gl.software ? 'программное' : 'доступно') + (d.gl.renderer ? ': ' + d.gl.renderer : '') : 'WebGL недоступен'],
-                ['CSS 3D transform', d.css3d === null ? 'неизвестно' : d.css3d ? 'да' : 'нет'],
-                ['Логические ядра (браузер)', d.cores ? String(d.cores) : 'недоступно'],
-                ['RAM (navigator.deviceMemory)', d.deviceMemory ? '≈ ' + d.deviceMemory + ' ГБ' : 'недоступно'],
-                ['API памяти JS', (window.performance && performance.memory) ? 'есть' : 'нет'],
-                ['User Agent', d.ua || 'недоступен']
-            ];
-            rows.forEach(function (r, i) { body.append(row('d' + i, r[0], r[1])); });
-            body.append($('<div class="ao__sec"></div>').text('Поддержка API'));
-            var i2 = 0;
-            for (var k in d.features) body.append(row('f' + (i2++), k, d.features[k] ? 'да' : 'нет', d.features[k] ? 'ao-ok' : 'ao-bad'));
-            d.notes.forEach(function (n) { body.append($('<div class="ao__note"></div>').text(n)); });
-        }
-
-        function cacheView() {
-            body.append(backBtn());
-            var keys = ownKeys();
-            var u = lsUsage();
-            body.append(row('k0', 'Данные плагина (ключи ao_*)', fmtBytes(u.own) + ' из лимита ' + fmtBytes(OWN_LIMIT)));
-            keys.forEach(function (k, i) { body.append(row('k' + (i + 1), k.key, fmtBytes(k.bytes))); });
-            body.append(row('k_auto', 'Автоочистка раз в сутки', S.autoClean ? 'включена' : 'выключена', S.autoClean ? 'ao-ok' : ''));
-            var g = $('<div class="ao__grid"></div>');
-            g.append(btn('c_clean', 'Очистить безопасные данные', function () {
-                confirmDialog('Очистить данные плагина?', 'Старые записи журнала, истории сети и лишние снимки. Настройки Lampa не затрагиваются', 'Да, очистить', function () {
-                    var r = cleanSafe();
-                    noty(r.actions.length ? 'Освобождено ' + fmtBytes(r.freed) : 'Очищать нечего');
-                    self.draw();
-                });
-            }));
-            g.append(btn('c_auto', S.autoClean ? 'Выключить автоочистку' : 'Включить автоочистку', function () { S.autoClean = !S.autoClean; saveSettings(); self.draw(); }));
-            g.append(btn('c_log', 'Стереть журнал', function () {
-                confirmDialog('Стереть журнал ошибок?', 'Только журнал плагина', 'Да, стереть', function () { logBuf = []; jset(K.log, []); self.draw(); });
-            }));
-            body.append(g);
-            body.append($('<div class="ao__note"></div>').text('Очищаются только данные плагина. Системный кэш телевизора, кэш браузера, история, закладки и аккаунты Lampa не затрагиваются: у плагина нет такого доступа и он его не использует.'));
-        }
-
-        function logView() {
-            body.append(backBtn());
-            var l = loadLog().slice().reverse().slice(0, 40);
-            if (!l.length) body.append($('<div class="ao__note"></div>').text('Журнал пуст.'));
-            l.forEach(function (e, i) { body.append(row('l' + i, fmtTime(e.t) + ' · ' + e.type + (e.own ? ' · плагин' : ''), e.msg + (e.n > 1 ? ' ×' + e.n : ''))); });
-        }
-
-        function reportView() {
-            body.append(backBtn());
-            var r = lastReport;
-            if (!r) { body.append($('<div class="ao__note"></div>').text('Отчётов пока нет.')); return; }
-            var title = r.kind === 'full' ? 'FULL OPTIMIZATION' : r.kind === 'deep' ? 'DEEP DIAGNOSTICS' : r.kind === 'quick' ? 'QUICK SCAN' : 'AUTO REPAIR';
-            body.append($('<div class="ao__sec"></div>').text('Отчёт: ' + title + ' · ' + fmtTime(r.t)));
-            var found = (r.issuesBefore ? r.issuesBefore.length : 0) + (r.found ? r.found.length : 0);
-            var fixedByMeasure = 0;
-            if (r.kind === 'full' && r.issuesAfter && !r.reverted) {
-                var open = {};
-                r.issuesAfter.forEach(function (x) { open[x.id] = 1; });
-                r.issuesBefore.forEach(function (x) { if (!open[x.id]) fixedByMeasure++; });
-            }
-            var fixed = (r.fixedRepair ? r.fixedRepair.length : 0) + fixedByMeasure;
-            body.append(row('r1', 'Найдено проблем', String(found)));
-            body.append(row('r2', 'Исправлено (ремонт + устранено по повторному замеру)', String(fixed)));
-            if (r.device) body.append(row('r3', 'Устройство', r.device));
-            body.append(row('r4', 'Выбранный профиль', PROFILE_NAMES[S.profile] + (r.reverted ? ' (откат: изменения не помогли)' : '')));
-            if (r.before !== null && r.before !== undefined) body.append(row('r5', 'Производительность до', String(r.before)));
-            if (r.kind === 'full') body.append(row('r6', 'Производительность после', r.after === null || r.after === undefined ? '—' : String(r.after)));
-            if (r.reasons && r.reasons.length) body.append(row('r7', 'Причина выбора профиля', r.reasons.join(', ')));
-
-            var done = (r.applied || []).concat(r.fixedRepair || []);
-            body.append($('<div class="ao__sec"></div>').text('Выполненные действия'));
-            if (!done.length) body.append(row('a0', 'Изменений не вносилось', ''));
-            done.forEach(function (t, i) { body.append(row('a' + i, t, '')); });
-
-            var left = (r.kind === 'full' ? (r.issuesAfter || []) : (r.issuesBefore || []));
-            body.append($('<div class="ao__sec"></div>').text('Требуют вмешательства'));
-            if (!left.length && !(r.unresolved && r.unresolved.length)) body.append(row('u0', 'Нерешённых проблем нет', '', 'ao-ok'));
-            left.forEach(function (is, i) { body.append(issueRow('u' + i, is)); });
-            (r.unresolved || []).forEach(function (t, i) { body.append(row('uu' + i, t, '')); });
-            (r.notes || []).forEach(function (t) { body.append($('<div class="ao__note"></div>').text(t)); });
-            body.append($('<div class="ao__note"></div>').text('Результаты замеров приблизительные и могут колебаться от запуска к запуску.'));
-
-            var g = $('<div class="ao__grid"></div>');
-            if (getSnaps().length) g.append(btn('r_undo', 'Восстановить предыдущие настройки', undoMenu));
-            body.append(g);
-        }
-
-        this.draw = function () {
-            if (destroyed) return;
-            body.empty();
-            progEl = null; stepEl = null;
-            if (view === 'diag') diagView();
-            else if (view === 'device') deviceView();
-            else if (view === 'cache') cacheView();
-            else if (view === 'log') logView();
-            else if (view === 'report') reportView();
-            else homeView();
-            if (Lampa.Controller.enabled && Lampa.Controller.enabled().name === COMPONENT) Lampa.Controller.toggle(COMPONENT);
-        };
-
-        this.create = function () {
-            scroll.append(body);
-            html.append(scroll.render());
-            this.draw();
-            this.activity.loader(false);
-            this.activity.toggle();
-        };
-
-        this.start = function () {
-            try {
-                if (Lampa.Activity.active && Lampa.Activity.active() && Lampa.Activity.active().activity !== this.activity) return;
-            } catch (e) { /* продолжаем */ }
-            var nav = (typeof Navigator !== 'undefined' && Navigator && typeof Navigator.canmove === 'function') ? Navigator : null;
-            Lampa.Controller.add(COMPONENT, {
-                toggle: function () {
-                    var target = body.find('[data-key="' + focusKey + '"]')[0] || body.find('.selector')[0] || false;
-                    Lampa.Controller.collectionSet(scroll.render());
-                    Lampa.Controller.collectionFocus(target, scroll.render());
-                },
-                left: function () { if (nav && nav.canmove('left')) nav.move('left'); else Lampa.Controller.toggle('menu'); },
-                right: function () { if (nav && nav.canmove('right')) nav.move('right'); },
-                up: function () { if (nav && nav.canmove('up')) nav.move('up'); else Lampa.Controller.toggle('head'); },
-                down: function () { if (nav && nav.canmove('down')) nav.move('down'); },
-                back: function () {
-                    if (busy) { cancel = true; noty('Отмена…'); return; }
-                    if (view !== 'home') { view = 'home'; self.draw(); return; }
-                    Lampa.Activity.backward();
-                }
-            });
-            Lampa.Controller.toggle(COMPONENT);
-        };
-
-        this.pause = function () {};
-        this.stop = function () {};
-        this.render = function () { return html; };
-        this.destroy = function () {
-            destroyed = true; cancel = true;
-            try { scroll.destroy(); } catch (e) { /* ignore */ }
-            html.remove();
-        };
-    }
-
-    /* ======================= меню и запуск ======================= */
-
-    function registerSettingsEntry() {
-        try {
-            if (!Lampa.SettingsApi || typeof Lampa.SettingsApi.addComponent !== 'function') {
-                dbg('SettingsApi.addComponent unavailable');
-                return false;
-            }
-            Lampa.SettingsApi.addComponent({
-                component: COMPONENT,
-                name: TITLE,
-                icon: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>'
-            });
-            if (typeof Lampa.SettingsApi.addParam === 'function') {
-                Lampa.SettingsApi.addParam({
-                    component: COMPONENT,
-                    param: { name: 'ao_open_panel', type: 'button' },
-                    field: { name: 'Открыть AUTO OPTIMIZER', description: 'Запустить диагностику и оптимизацию Lampa' },
-                    onRender: function (item) {
-                        item.on('hover:enter click', function () {
-                            Lampa.Activity.push({ url: '', title: TITLE, component: COMPONENT, page: 1 });
-                        });
-                    }
-                });
-            }
-            dbg('Settings entry registered');
-            return true;
-        } catch (e) {
-            dbg('SettingsApi registration failed', e);
             return false;
         }
     }
 
-    function addMenuItem() {
-        var icon = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>';
-        function open() {
-            try { Lampa.Activity.push({ url: '', title: TITLE, component: COMPONENT, page: 1 }); }
-            catch (e) { dbg('Activity.push failed', e); noty(TITLE + ': не удалось открыть окно'); }
-        }
-        function exists() {
-            var found = false;
-            $('.menu__text').each(function () {
-                if (String($(this).text()).trim() === TITLE) found = true;
-            });
-            return found;
-        }
-        function insertDom() {
-            if (exists()) return true;
-            var list = $('.menu .menu__list').eq(0);
-            if (!list.length) list = $('.menu__list').eq(0);
-            if (!list.length) return false;
+    function getGenreName(id) {
+        return GENRES_MAP[id] || '';
+    }
 
-            var li = $('<li class="menu__item selector"><div class="menu__ico"></div><div class="menu__text"></div></li>');
-            li.find('.menu__ico').html(icon);
-            li.find('.menu__text').text(TITLE);
-            li.on('hover:enter', open);
-            li.on('click', open);
-            list.append(li);
-            dbg('Menu item inserted into DOM');
-            return true;
-        }
+    function cardKey(card) {
+        return (card.media_type || 'movie') + '_' + card.id;
+    }
 
-        // Сначала используем штатный API, если он реально доступен.
-        try {
-            if (Lampa.Menu && typeof Lampa.Menu.addButton === 'function') {
-                Lampa.Menu.addButton(icon, TITLE, open);
-                if (exists()) return 'api';
+    function formatRuntime(mins) {
+        if (!mins || isNaN(mins) || mins <= 0) return '';
+        var h = Math.floor(mins / 60);
+        var m = mins % 60;
+        if (h > 0 && m > 0) return h + ' ч ' + m + ' мин';
+        if (h > 0) return h + ' ч';
+        return m + ' мин';
+    }
+
+    function getDecadeFromYear(year) {
+        var y = parseInt(year, 10);
+        if (!y || isNaN(y)) return null;
+        if (y < 1990) return 'classic';
+        return String(Math.floor(y / 10) * 10) + 's';
+    }
+
+    function decadeLabel(dec) {
+        if (dec === 'classic') return 'классика до 1990';
+        if (dec === '1990s') return '1990-е';
+        if (dec === '2000s') return '2000-е';
+        if (dec === '2010s') return '2010-е';
+        if (dec === '2020s') return '2020-е';
+        return dec || '';
+    }
+
+    function getInitials(title) {
+        if (!title) return 'CK';
+        var parts = String(title).trim().split(/\s+/);
+        if (parts.length >= 2) {
+            return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+        }
+        return String(title).substring(0, 2).toUpperCase();
+    }
+
+    // =========================================================================
+    // ХРАНИЛИЩЕ И ЗАЩИТА ОТ ПОВРЕЖДЁННЫХ ДАННЫХ
+    // =========================================================================
+
+    function createDefaultState() {
+        return {
+            stats: {
+                comparisons: 0,
+                wins: 0
+            },
+            genreScores: {},
+            decadeScores: {},
+            typeScores: {
+                movie: 0,
+                tv: 0
+            },
+            ratingSum: 0,
+            ratingCount: 0,
+            winners: [],
+            history: [],
+            settings: {
+                contentType: 'movie',
+                excludedGenres: [],
+                minRating: 6.0,
+                period: 'all'
+            },
+            koth: {
+                champion: null,
+                streak: 0,
+                round: 1,
+                hallOfFame: []
             }
-        } catch (e) { dbg('Menu.addButton failed, using DOM fallback', e); }
+        };
+    }
 
-        if (insertDom()) return 'dom';
+    var StorageManager = {
+        sanitize: function (raw) {
+            var def = createDefaultState();
+            if (!raw || typeof raw !== 'object') return def;
 
-        // Меню может появиться позже события app:ready. Ждём его создания.
-        var attempts = 0;
-        var maxAttempts = 60;
-        var timer = setInterval(function () {
-            attempts++;
-            if (insertDom() || attempts >= maxAttempts) {
-                clearInterval(timer);
-                if (attempts >= maxAttempts && !exists()) {
-                    dbg('Menu container not found after waiting');
-                    noty(TITLE + ': меню Lampa не найдено. Перезапустите приложение.');
+            try {
+                if (raw.stats && typeof raw.stats === 'object') {
+                    def.stats.comparisons = Math.max(0, parseInt(raw.stats.comparisons, 10) || 0);
+                    def.stats.wins = Math.max(0, parseInt(raw.stats.wins, 10) || 0);
                 }
+                if (raw.genreScores && typeof raw.genreScores === 'object') {
+                    for (var g in raw.genreScores) {
+                        if (raw.genreScores.hasOwnProperty(g) && !isNaN(parseFloat(raw.genreScores[g]))) {
+                            def.genreScores[g] = parseFloat(raw.genreScores[g]);
+                        }
+                    }
+                }
+                if (raw.decadeScores && typeof raw.decadeScores === 'object') {
+                    for (var d in raw.decadeScores) {
+                        if (raw.decadeScores.hasOwnProperty(d) && !isNaN(parseFloat(raw.decadeScores[d]))) {
+                            def.decadeScores[d] = parseFloat(raw.decadeScores[d]);
+                        }
+                    }
+                }
+                if (raw.typeScores && typeof raw.typeScores === 'object') {
+                    def.typeScores.movie = parseFloat(raw.typeScores.movie) || 0;
+                    def.typeScores.tv = parseFloat(raw.typeScores.tv) || 0;
+                }
+                def.ratingSum = parseFloat(raw.ratingSum) || 0;
+                def.ratingCount = Math.max(0, parseInt(raw.ratingCount, 10) || 0);
+
+                if (Object.prototype.toString.call(raw.winners) === '[object Array]') {
+                    def.winners = raw.winners.filter(function (w) {
+                        return w && w.id && w.title;
+                    }).slice(0, 200);
+                }
+                if (Object.prototype.toString.call(raw.history) === '[object Array]') {
+                    def.history = raw.history.filter(function (h) {
+                        return h && h.winnerTitle && h.loserTitle;
+                    }).slice(0, 60);
+                }
+                if (raw.settings && typeof raw.settings === 'object') {
+                    if (['movie', 'tv', 'all'].indexOf(raw.settings.contentType) !== -1) {
+                        def.settings.contentType = raw.settings.contentType;
+                    }
+                    if (Object.prototype.toString.call(raw.settings.excludedGenres) === '[object Array]') {
+                        def.settings.excludedGenres = raw.settings.excludedGenres.map(function (id) {
+                            return parseInt(id, 10);
+                        }).filter(function (id) {
+                            return !isNaN(id);
+                        });
+                    }
+                    if (!isNaN(parseFloat(raw.settings.minRating))) {
+                        def.settings.minRating = parseFloat(raw.settings.minRating);
+                    }
+                    if (typeof raw.settings.period === 'string') {
+                        def.settings.period = raw.settings.period;
+                    }
+                }
+                if (raw.koth && typeof raw.koth === 'object') {
+                    if (raw.koth.champion && raw.koth.champion.id && raw.koth.champion.title) {
+                        def.koth.champion = raw.koth.champion;
+                    }
+                    def.koth.streak = Math.max(0, parseInt(raw.koth.streak, 10) || 0);
+                    def.koth.round = Math.max(1, parseInt(raw.koth.round, 10) || 1);
+                    if (Object.prototype.toString.call(raw.koth.hallOfFame) === '[object Array]') {
+                        def.koth.hallOfFame = raw.koth.hallOfFame.filter(function (item) {
+                            return item && item.card && item.card.id;
+                        }).slice(0, 30);
+                    }
+                }
+            } catch (e) {
+                return createDefaultState();
             }
-        }, 500);
+            return def;
+        },
 
-        // Дополнительно реагируем на позднее создание DOM меню.
-        if (typeof MutationObserver !== 'undefined' && document.documentElement) {
-            var observer = new MutationObserver(function () {
-                if (insertDom()) {
-                    observer.disconnect();
-                    clearInterval(timer);
+        load: function () {
+            try {
+                var saved = Lampa.Storage.get(STORAGE_KEY, null);
+                if (typeof saved === 'string') {
+                    saved = JSON.parse(saved);
                 }
-            });
-            observer.observe(document.documentElement, { childList: true, subtree: true });
-            setTimeout(function () { try { observer.disconnect(); } catch (e) {} }, 30000);
+                return this.sanitize(saved);
+            } catch (e) {
+                return createDefaultState();
+            }
+        },
+
+        save: function (state) {
+            try {
+                Lampa.Storage.set(STORAGE_KEY, state);
+            } catch (e) {
+                // Игнорируем переполнение localStorage на ТВ
+            }
         }
-        return 'waiting';
-    }
-
-    var started = false;
-
-    function start() {
-        if (started) return;
-        started = true;
-        var need = ['Storage', 'Scroll', 'Component', 'Activity', 'Controller', 'Select', 'Noty', 'Listener'];
-        var missing = need.filter(function (n) { return !window.Lampa || !window.Lampa[n]; });
-        if (missing.length || typeof window.$ !== 'function') {
-            dbg('Не хватает API:', missing.join(', '));
-            try { noty(TITLE + ': эта версия Lampa не поддерживается (нет ' + missing.join(', ') + ')'); } catch (e) { /* ignore */ }
-            return;
-        }
-        try {
-            startDetector();
-            loadLast();
-            if (corruptKeys.length || settingsWereInvalid) selfCheckAndRepair();
-            applyFeatures();
-            startScheduler();
-            injectCss();
-            Lampa.Component.add(COMPONENT, Component);
-            var settingsEntry = registerSettingsEntry();
-            var how = addMenuItem();
-            if (!how) noty(TITLE + ': не удалось добавить пункт в меню');
-            dbg('v' + VERSION + ' ready, menu:', how, 'settings entry:', settingsEntry, 'profile:', S.profile);
-        } catch (e2) {
-            dbg('init error', e2);
-            addLog('own', 'Ошибка запуска: ' + (e2 && e2.message), true);
-            noty(TITLE + ': ошибка запуска, подробности в консоли');
-        }
-    }
-
-    function boot() {
-        if (window.appready) start();
-        else Lampa.Listener.follow('app', function (e) { if (e.type === 'ready') start(); });
-    }
-
-    function waitLampa(left) {
-        if (window.Lampa && window.Lampa.Listener) boot();
-        else if (left > 0) setTimeout(function () { waitLampa(left - 1); }, 200);
-    }
-
-    // для проверки логики вне Lampa
-    window.AutoOptimizerCore = {
-        version: VERSION, computeScore: computeScore, analyze: analyze, chooseProfile: chooseProfile,
-        scanDevice: scanDevice, validSettings: validSettings, defaults: defaults, getSettings: function () { return S; },
-        setProfile: setProfile, pushSnapshot: pushSnapshot, restoreSnapshot: restoreSnapshot, getSnaps: getSnaps,
-        cleanSafe: cleanSafe, selfCheckAndRepair: selfCheckAndRepair, addLog: addLog, loadLog: loadLog,
-        scoreLabel: scoreLabel, featureDiff: featureDiff, median: median
     };
 
-    waitLampa(50);
+    // =========================================================================
+    // КАТАЛОГ TMDB (ШТАТНЫЕ API LAMPA)
+    // =========================================================================
+
+    var CatalogService = {
+        getLang: function () {
+            try {
+                return Lampa.Storage.get('language', 'ru') || 'ru';
+            } catch (e) {
+                return 'ru';
+            }
+        },
+
+        getImageUrl: function (path, size) {
+            if (!path) return '';
+            var clean = path.charAt(0) === '/' ? path : '/' + path;
+            try {
+                if (Lampa.TMDB && typeof Lampa.TMDB.image === 'function') {
+                    return Lampa.TMDB.image('t/p/' + (size || 'w500') + clean);
+                }
+            } catch (e) {}
+            return 'https://image.tmdb.org/t/p/' + (size || 'w500') + clean;
+        },
+
+        buildApiUrl: function (endpoint, params) {
+            var query = [];
+            var lang = this.getLang();
+            var key = '';
+            try {
+                if (Lampa.TMDB && typeof Lampa.TMDB.key === 'function') {
+                    key = Lampa.TMDB.key();
+                }
+            } catch (e) {}
+
+            params = params || {};
+            if (key) params.api_key = key;
+            if (!params.language) params.language = lang;
+
+            for (var k in params) {
+                if (params.hasOwnProperty(k) && params[k] !== null && params[k] !== undefined && params[k] !== '') {
+                    query.push(encodeURIComponent(k) + '=' + encodeURIComponent(params[k]));
+                }
+            }
+
+            var path = endpoint + (query.length ? '?' + query.join('&') : '');
+            try {
+                if (Lampa.TMDB && typeof Lampa.TMDB.api === 'function') {
+                    return Lampa.TMDB.api(path);
+                }
+            } catch (e) {}
+            return 'https://api.themoviedb.org/3/' + path;
+        },
+
+        normalizeCard: function (raw, forcedType) {
+            if (!raw || !raw.id) return null;
+            var mediaType = forcedType || raw.media_type || (raw.first_air_date ? 'tv' : 'movie');
+            var title = raw.title || raw.name || raw.original_title || raw.original_name || 'Без названия';
+            var dateStr = raw.release_date || raw.first_air_date || '';
+            var year = dateStr ? dateStr.substring(0, 4) : '';
+            var genres = [];
+
+            if (Object.prototype.toString.call(raw.genre_ids) === '[object Array]') {
+                genres = raw.genre_ids.slice();
+            } else if (Object.prototype.toString.call(raw.genres) === '[object Array]') {
+                for (var i = 0; i < raw.genres.length; i++) {
+                    if (raw.genres[i] && raw.genres[i].id) genres.push(raw.genres[i].id);
+                }
+            }
+
+            var rating = parseFloat(raw.vote_average);
+            if (isNaN(rating) || rating <= 0) rating = 0;
+
+            return {
+                id: raw.id,
+                media_type: mediaType,
+                title: title,
+                original_title: raw.original_title || raw.original_name || title,
+                year: year,
+                poster_path: raw.poster_path || '',
+                backdrop_path: raw.backdrop_path || '',
+                poster: this.getImageUrl(raw.poster_path, 'w500'),
+                backdrop: this.getImageUrl(raw.backdrop_path, 'w780'),
+                rating: rating ? Math.round(rating * 10) / 10 : 0,
+                vote_count: parseInt(raw.vote_count, 10) || 0,
+                genres: genres,
+                overview: raw.overview ? String(raw.overview).trim() : '',
+                runtime: runtimeCache[mediaType + '_' + raw.id] || 0,
+                // Сохраняем поля для открытия нативной карточки Lampa
+                release_date: raw.release_date || '',
+                first_air_date: raw.first_air_date || '',
+                name: raw.name || '',
+                vote_average: raw.vote_average || 0
+            };
+        },
+
+        fetchDiscover: function (network, opts, onSuccess, onError) {
+            var type = opts.mediaType === 'tv' ? 'tv' : 'movie';
+            var params = {
+                page: opts.page || 1,
+                sort_by: opts.sortBy || 'popularity.desc',
+                'vote_count.gte': opts.minVotes !== undefined ? opts.minVotes : 120
+            };
+
+            if (opts.minRating && opts.minRating > 0) {
+                params['vote_average.gte'] = opts.minRating;
+            }
+            if (opts.withGenres) {
+                params.with_genres = opts.withGenres;
+            }
+            if (opts.excludedGenres && opts.excludedGenres.length) {
+                params.without_genres = opts.excludedGenres.join(',');
+            }
+
+            if (opts.period && opts.period !== 'all') {
+                for (var i = 0; i < PERIOD_OPTIONS.length; i++) {
+                    if (PERIOD_OPTIONS[i].id === opts.period) {
+                        var p = PERIOD_OPTIONS[i];
+                        if (type === 'movie') {
+                            if (p.from) params['primary_release_date.gte'] = p.from;
+                            if (p.to) params['primary_release_date.lte'] = p.to;
+                        } else {
+                            if (p.from) params['first_air_date.gte'] = p.from;
+                            if (p.to) params['first_air_date.lte'] = p.to;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            var url = this.buildApiUrl('discover/' + type, params);
+            var self = this;
+
+            network.silent(url, function (data) {
+                if (!data || Object.prototype.toString.call(data.results) !== '[object Array]') {
+                    onSuccess([]);
+                    return;
+                }
+                var list = [];
+                for (var j = 0; j < data.results.length; j++) {
+                    var norm = self.normalizeCard(data.results[j], type);
+                    if (norm) list.push(norm);
+                }
+                onSuccess(list);
+            }, function (err) {
+                if (onError) onError(err);
+            });
+        },
+
+        fetchRuntime: function (network, card, callback) {
+            var key = cardKey(card);
+            if (runtimeCache[key]) {
+                card.runtime = runtimeCache[key];
+                if (callback) callback(card.runtime);
+                return;
+            }
+            var endpoint = (card.media_type === 'tv' ? 'tv/' : 'movie/') + card.id;
+            var url = this.buildApiUrl(endpoint, {});
+            network.silent(url, function (data) {
+                var mins = 0;
+                if (data) {
+                    if (data.runtime) mins = parseInt(data.runtime, 10) || 0;
+                    else if (data.episode_run_time && data.episode_run_time.length) {
+                        mins = parseInt(data.episode_run_time[0], 10) || 0;
+                    }
+                }
+                if (mins > 0) {
+                    runtimeCache[key] = mins;
+                    card.runtime = mins;
+                    if (callback) callback(mins);
+                }
+            }, function () {});
+        }
+    };
+
+    // =========================================================================
+    // АЛГОРИТМ АНАЛИЗА ПРЕДПОЧТЕНИЙ И РЕКОМЕНДАЦИЙ (БЕЗ «МАГИИ ИИ»)
+    // =========================================================================
+
+    var TasteEngine = {
+        recordBattleChoice: function (state, winner, loser) {
+            state.stats.comparisons += 1;
+            state.stats.wins += 1;
+
+            // Положительные баллы жанрам победителя
+            var winGenres = winner.genres || [];
+            var loseGenres = loser.genres || [];
+            var i, gid;
+
+            for (i = 0; i < winGenres.length; i++) {
+                gid = String(winGenres[i]);
+                state.genreScores[gid] = (state.genreScores[gid] || 0) + 3;
+            }
+
+            // Небольшой штраф уникальным жанрам проигравшего для точности профиля
+            for (i = 0; i < loseGenres.length; i++) {
+                gid = String(loseGenres[i]);
+                if (winGenres.indexOf(loseGenres[i]) === -1) {
+                    state.genreScores[gid] = (state.genreScores[gid] || 0) - 0.6;
+                }
+            }
+
+            // Эпоха / год выпуска
+            var dec = getDecadeFromYear(winner.year);
+            if (dec) {
+                state.decadeScores[dec] = (state.decadeScores[dec] || 0) + 2;
+            }
+
+            // Тип контента
+            var mtype = winner.media_type === 'tv' ? 'tv' : 'movie';
+            state.typeScores[mtype] = (state.typeScores[mtype] || 0) + 1;
+
+            // Предпочитаемый рейтинг
+            if (winner.rating && winner.rating > 0) {
+                state.ratingSum += winner.rating;
+                state.ratingCount += 1;
+            }
+
+            // Сохранение в список «Мои победители»
+            var existing = null;
+            for (i = 0; i < state.winners.length; i++) {
+                if (state.winners[i].id === winner.id && state.winners[i].media_type === winner.media_type) {
+                    existing = state.winners[i];
+                    break;
+                }
+            }
+            if (existing) {
+                existing.wins = (existing.wins || 1) + 1;
+                existing.lastWon = Date.now();
+            } else {
+                state.winners.unshift({
+                    id: winner.id,
+                    media_type: winner.media_type,
+                    title: winner.title,
+                    year: winner.year,
+                    poster_path: winner.poster_path,
+                    backdrop_path: winner.backdrop_path,
+                    poster: winner.poster,
+                    rating: winner.rating,
+                    genres: winner.genres || [],
+                    overview: winner.overview || '',
+                    wins: 1,
+                    lastWon: Date.now()
+                });
+                if (state.winners.length > 200) state.winners.pop();
+            }
+
+            // История сравнений
+            state.history.unshift({
+                winnerId: winner.id,
+                media_type: winner.media_type,
+                winnerTitle: winner.title,
+                loserTitle: loser.title,
+                date: Date.now()
+            });
+            if (state.history.length > 60) state.history.pop();
+
+            StorageManager.save(state);
+        },
+
+        getTopGenres: function (state, limit) {
+            var arr = [];
+            var maxScore = 0;
+
+            for (var gid in state.genreScores) {
+                if (state.genreScores.hasOwnProperty(gid)) {
+                    var score = state.genreScores[gid];
+                    var name = getGenreName(parseInt(gid, 10));
+                    if (name && score > 0) {
+                        arr.push({ id: parseInt(gid, 10), name: name, score: score });
+                        if (score > maxScore) maxScore = score;
+                    }
+                }
+            }
+
+            arr.sort(function (a, b) {
+                return b.score - a.score;
+            });
+
+            var result = arr.slice(0, limit || 6);
+            for (var i = 0; i < result.length; i++) {
+                result[i].percent = maxScore > 0 ? Math.max(12, Math.round((result[i].score / maxScore) * 100)) : 0;
+            }
+            return result;
+        },
+
+        getTopDecade: function (state) {
+            var best = null;
+            var bestVal = 0;
+            for (var d in state.decadeScores) {
+                if (state.decadeScores.hasOwnProperty(d) && state.decadeScores[d] > bestVal) {
+                    bestVal = state.decadeScores[d];
+                    best = d;
+                }
+            }
+            return best;
+        },
+
+        getAveragePreferredRating: function (state) {
+            if (!state.ratingCount) return 0;
+            return Math.round((state.ratingSum / state.ratingCount) * 10) / 10;
+        },
+
+        getTasteSummary: function (state) {
+            var top = this.getTopGenres(state, 3);
+            if (!top.length || state.stats.comparisons < 2) {
+                return 'Сыграй пару раундов, чтобы система определила твои любимые жанры и эпоху.';
+            }
+            var names = top.map(function (g) { return g.name.toLowerCase(); });
+            var text = 'Твои фавориты: ' + names.join(', ');
+            var dec = this.getTopDecade(state);
+            if (dec) {
+                text += ' • Эпоха: ' + decadeLabel(dec);
+            }
+            return text;
+        },
+
+        scoreCard: function (state, card) {
+            var score = 0;
+            var genres = card.genres || [];
+            var topGenres = this.getTopGenres(state, 5);
+            var maxGenreScore = topGenres.length ? topGenres[0].score : 1;
+
+            // Жанровый вклад (до 60 баллов)
+            var genreSum = 0;
+            for (var i = 0; i < genres.length; i++) {
+                var gs = state.genreScores[String(genres[i])] || 0;
+                if (gs > 0) genreSum += (gs / maxGenreScore);
+            }
+            score += Math.min(60, Math.round(genreSum * 32));
+
+            // Вклад эпохи (до 15 баллов)
+            var dec = getDecadeFromYear(card.year);
+            var topDec = this.getTopDecade(state);
+            if (dec && topDec && dec === topDec) {
+                score += 15;
+            } else if (dec && state.decadeScores[dec] > 0) {
+                score += 8;
+            }
+
+            // Вклад рейтинга (до 20 баллов)
+            if (card.rating >= 7.5) score += 20;
+            else if (card.rating >= 6.8) score += 14;
+            else if (card.rating >= 6.0) score += 8;
+
+            // Тип контента (до 5 баллов)
+            if (state.typeScores[card.media_type] > 0) {
+                score += 5;
+            }
+
+            return Math.min(99, Math.max(40, score));
+        },
+
+        explainRecommendation: function (state, card) {
+            var matched = [];
+            var genres = card.genres || [];
+            for (var i = 0; i < genres.length; i++) {
+                var gid = genres[i];
+                if ((state.genreScores[String(gid)] || 0) > 1.5) {
+                    var nm = getGenreName(gid);
+                    if (nm) matched.push(nm.toLowerCase());
+                }
+            }
+
+            var dec = getDecadeFromYear(card.year);
+            var topDec = this.getTopDecade(state);
+
+            if (matched.length >= 2) {
+                return 'Рекомендуем, потому что ты часто выбирал жанры: ' + matched.slice(0, 2).join(' и ') + '.';
+            }
+            if (matched.length === 1) {
+                if (dec && topDec && dec === topDec) {
+                    return 'Подходит под твой интерес к жанру «' + matched[0] + '» и кино эпохи ' + decadeLabel(dec) + '.';
+                }
+                return 'Рекомендуем, потому что среди твоих выборов часто встречается «' + matched[0] + '».';
+            }
+            if (card.rating >= 7.8) {
+                return 'Высоко оценённая картина (' + card.rating + ') для расширения твоего киновкуса.';
+            }
+            return 'Свежее предложение из каталога, чтобы разнообразить подборку и проверить новые жанры.';
+        },
+
+        pickNextPair: function (state, pool, sessionSeen) {
+            var available = [];
+            var i;
+            for (i = 0; i < pool.length; i++) {
+                var c = pool[i];
+                if (!sessionSeen[cardKey(c)]) {
+                    available.push(c);
+                }
+            }
+            if (available.length < 2) return null;
+
+            // Холодный старт: разнообразные популярные фильмы
+            if (state.stats.comparisons < 4) {
+                var idx1 = Math.floor(Math.random() * Math.min(available.length, 10));
+                var first = available[idx1];
+                var second = null;
+
+                // Ищем второго кандидата с другим основным жанром
+                for (i = 0; i < available.length; i++) {
+                    if (i === idx1) continue;
+                    if (!first.genres.length || !available[i].genres.length || first.genres[0] !== available[i].genres[0]) {
+                        second = available[i];
+                        break;
+                    }
+                }
+                if (!second) {
+                    second = available[idx1 === 0 ? 1 : 0];
+                }
+                return [first, second];
+            }
+
+            // Тёплый режим: 70% по профилю вкуса, 30% разведка новых жанров
+            var scored = available.map(function (item) {
+                return {
+                    card: item,
+                    score: TasteEngine.scoreCard(state, item) + (Math.random() * 12)
+                };
+            });
+            scored.sort(function (a, b) {
+                return b.score - a.score;
+            });
+
+            var cardA = scored[0].card;
+            var cardB = null;
+            var explore = Math.random() < 0.30;
+
+            if (explore && scored.length > 4) {
+                // Берём неожиданного соперника из нижней половины пула для разнообразия
+                var mid = Math.floor(scored.length / 2);
+                var pick = mid + Math.floor(Math.random() * (scored.length - mid));
+                cardB = scored[pick].card;
+            } else {
+                // Берём сильного соперника с отличающимся ID
+                var candidateIdx = 1 + Math.floor(Math.random() * Math.min(4, scored.length - 1));
+                cardB = scored[candidateIdx].card;
+            }
+
+            if (!cardB || cardKey(cardA) === cardKey(cardB)) {
+                cardB = scored[1].card;
+            }
+
+            return Math.random() < 0.5 ? [cardA, cardB] : [cardB, cardA];
+        }
+    };
+
+    // =========================================================================
+    // ВСТРОЕННЫЕ СТИЛИ (КИНЕМАТОГРАФИЧНАЯ ТЁМНАЯ ТЕМА)
+    // =========================================================================
+
+    function injectStyles() {
+        if (document.getElementById(STYLE_ID)) return;
+
+        var css = '' +
+            '.ck-root { position: relative; min-height: 100%; padding: 1.2em 2.2em 3em; color: #f1f5f9; background: radial-gradient(circle at 18% 0%, rgba(37,99,235,0.22) 0%, rgba(7,11,18,0.96) 52%, #05080f 100%); box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }' +
+            '.ck-root * { box-sizing: border-box; }' +
+
+            /* Шапка и навигация */
+            '.ck-topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1em; margin-bottom: 1.6em; padding-bottom: 1em; border-bottom: 1px solid rgba(56,189,248,0.16); }' +
+            '.ck-brand { display: flex; align-items: center; gap: 0.7em; }' +
+            '.ck-brand-icon { width: 2.3em; height: 2.3em; border-radius: 0.65em; background: linear-gradient(135deg, #2563eb, #06b6d4); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 18px rgba(56,189,248,0.38); flex-shrink: 0; }' +
+            '.ck-brand-title { font-size: 1.35em; font-weight: 800; letter-spacing: 0.03em; background: linear-gradient(90deg, #ffffff 0%, #7dd3fc 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; color: #fff; }' +
+            '.ck-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 0.45em; }' +
+            '.ck-tab { padding: 0.52em 1.05em; border-radius: 999px; background: rgba(15,23,42,0.78); border: 1px solid rgba(148,163,184,0.18); color: #cbd5e1; font-size: 0.92em; font-weight: 600; cursor: pointer; transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease; }' +
+            '.ck-tab.is-active { background: linear-gradient(135deg, rgba(37,99,235,0.85), rgba(14,165,233,0.78)); border-color: rgba(125,211,252,0.7); color: #ffffff; box-shadow: 0 0 16px rgba(14,165,233,0.35); }' +
+            '.ck-tab.focus { transform: scale(1.06); border-color: #38bdf8; box-shadow: 0 0 0 2px rgba(56,189,248,0.75), 0 6px 18px rgba(14,165,233,0.35); color: #fff; }' +
+
+            /* Контейнер контента и анимация переходов */
+            '.ck-view { animation: ckFadeUp 0.28s ease both; }' +
+            '@keyframes ckFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }' +
+
+            /* Главный экран */
+            '.ck-hero { position: relative; padding: 2.4em 2.4em; border-radius: 1.25em; background: linear-gradient(135deg, rgba(15,23,42,0.92) 0%, rgba(12,26,51,0.88) 55%, rgba(8,47,73,0.72) 100%); border: 1px solid rgba(56,189,248,0.25); box-shadow: 0 18px 45px rgba(0,0,0,0.45); overflow: hidden; margin-bottom: 1.6em; }' +
+            '.ck-hero-badge { display: inline-block; padding: 0.32em 0.9em; border-radius: 999px; background: rgba(56,189,248,0.16); border: 1px solid rgba(56,189,248,0.35); color: #7dd3fc; font-size: 0.82em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.9em; }' +
+            '.ck-hero-title { font-size: 2.35em; font-weight: 800; line-height: 1.15; margin: 0 0 0.45em; color: #ffffff; }' +
+            '.ck-hero-sub { font-size: 1.08em; line-height: 1.5; color: #cbd5e1; max-width: 44em; margin: 0 0 1.6em; }' +
+            '.ck-actions { display: flex; flex-wrap: wrap; gap: 0.9em; }' +
+            '.ck-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.55em; padding: 0.85em 1.65em; border-radius: 0.8em; font-size: 1em; font-weight: 700; cursor: pointer; border: 1px solid transparent; transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease; }' +
+            '.ck-btn--primary { background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%); color: #ffffff; box-shadow: 0 8px 24px rgba(14,165,233,0.35); }' +
+            '.ck-btn--secondary { background: rgba(15,23,42,0.85); border-color: rgba(56,189,248,0.35); color: #e2e8f0; }' +
+            '.ck-btn--danger { background: rgba(127,29,29,0.55); border-color: rgba(248,113,113,0.45); color: #fecaca; }' +
+            '.ck-btn--sm { padding: 0.55em 1.05em; font-size: 0.88em; border-radius: 0.65em; }' +
+            '.ck-btn.focus { transform: scale(1.05); box-shadow: 0 0 0 2px #7dd3fc, 0 10px 26px rgba(14,165,233,0.5); border-color: #ffffff; }' +
+
+            /* Статистика на главной */
+            '.ck-kpi-grid { display: flex; flex-wrap: wrap; gap: 1.1em; }' +
+            '.ck-kpi-card { flex: 1 1 14em; padding: 1.35em 1.5em; border-radius: 1em; background: rgba(13,20,34,0.88); border: 1px solid rgba(148,163,184,0.16); }' +
+            '.ck-kpi-label { font-size: 0.84em; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.45em; }' +
+            '.ck-kpi-value { font-size: 2em; font-weight: 800; color: #38bdf8; line-height: 1.1; }' +
+            '.ck-kpi-text { font-size: 0.96em; color: #e2e8f0; line-height: 1.45; margin-top: 0.35em; }' +
+
+            /* Битва и Царь горы */
+            '.ck-arena-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.8em; margin-bottom: 1.2em; }' +
+            '.ck-arena-title { font-size: 1.35em; font-weight: 800; color: #fff; }' +
+            '.ck-arena-meta { font-size: 0.92em; color: #7dd3fc; font-weight: 600; }' +
+            '.ck-battle-wrap { position: relative; display: flex; align-items: stretch; gap: 1.6em; }' +
+            '.ck-vs-badge { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5; width: 3.4em; height: 3.4em; border-radius: 50%; background: linear-gradient(135deg, #1d4ed8, #06b6d4); border: 2px solid rgba(255,255,255,0.75); box-shadow: 0 0 26px rgba(14,165,233,0.65); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.05em; color: #fff; pointer-events: none; }' +
+
+            '.ck-card { flex: 1 1 48%; position: relative; display: flex; flex-direction: row; border-radius: 1.15em; overflow: hidden; background: linear-gradient(160deg, rgba(15,23,42,0.96) 0%, rgba(9,14,26,0.98) 100%); border: 1px solid rgba(56,189,248,0.22); box-shadow: 0 14px 36px rgba(0,0,0,0.45); cursor: pointer; min-height: 21em; transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, opacity 0.35s ease; }' +
+            '.ck-card.focus { transform: translateY(-4px) scale(1.015); border-color: #38bdf8; box-shadow: 0 0 0 2px rgba(56,189,248,0.85), 0 18px 42px rgba(14,165,233,0.35); }' +
+            '.ck-card--champion { border-color: rgba(250,204,21,0.55); box-shadow: 0 0 24px rgba(250,204,21,0.16); }' +
+
+            /* Анимации карточек битвы */
+            '.ck-card--enter-left { animation: ckEnterLeft 0.34s ease both; }' +
+            '.ck-card--enter-right { animation: ckEnterRight 0.34s ease both; }' +
+            '.ck-card--win { border-color: #38bdf8 !important; box-shadow: 0 0 0 3px #38bdf8, 0 0 38px rgba(56,189,248,0.68) !important; transform: scale(1.03) !important; z-index: 4; }' +
+            '.ck-card--lose-left { transform: translateX(-50px) scale(0.92) !important; opacity: 0 !important; }' +
+            '.ck-card--lose-right { transform: translateX(50px) scale(0.92) !important; opacity: 0 !important; }' +
+            '@keyframes ckEnterLeft { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: translateX(0); } }' +
+            '@keyframes ckEnterRight { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }' +
+
+            '.ck-card-poster { position: relative; width: 13.5em; min-width: 13.5em; background: linear-gradient(135deg, #0f172a, #1e293b); overflow: hidden; flex-shrink: 0; }' +
+            '.ck-card-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }' +
+            '.ck-poster-fallback { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(145deg, #1e3a8a, #0f172a); color: #7dd3fc; font-size: 2.6em; font-weight: 800; letter-spacing: 0.05em; }' +
+            '.ck-card-ribbon { position: absolute; top: 0.75em; left: 0.75em; padding: 0.28em 0.72em; border-radius: 0.5em; font-size: 0.78em; font-weight: 800; letter-spacing: 0.03em; background: rgba(7,11,18,0.85); color: #facc15; border: 1px solid rgba(250,204,21,0.55); }' +
+            '.ck-card-ribbon--challenger { color: #7dd3fc; border-color: rgba(56,189,248,0.55); }' +
+
+            '.ck-card-info { flex: 1; padding: 1.35em 1.45em; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }' +
+            '.ck-card-title { font-size: 1.42em; font-weight: 800; line-height: 1.22; color: #ffffff; margin: 0 0 0.45em; }' +
+            '.ck-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55em; margin-bottom: 0.75em; font-size: 0.88em; color: #94a3b8; }' +
+            '.ck-rating-pill { display: inline-flex; align-items: center; gap: 0.28em; padding: 0.2em 0.6em; border-radius: 0.45em; background: rgba(56,189,248,0.16); color: #7dd3fc; font-weight: 700; }' +
+            '.ck-genres { display: flex; flex-wrap: wrap; gap: 0.4em; margin-bottom: 0.85em; }' +
+            '.ck-genre-chip { padding: 0.22em 0.65em; border-radius: 999px; background: rgba(30,41,59,0.85); border: 1px solid rgba(148,163,184,0.2); font-size: 0.78em; color: #cbd5e1; }' +
+            '.ck-overview { font-size: 0.9em; line-height: 1.48; color: #cbd5e1; margin: 0 0 1em; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }' +
+            '.ck-card-cta { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 0.72em 1em; border-radius: 0.7em; background: linear-gradient(135deg, rgba(37,99,235,0.9), rgba(14,165,233,0.85)); color: #fff; font-weight: 700; font-size: 0.94em; text-align: center; }' +
+
+            '.ck-battle-footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.8em; margin-top: 1.3em; }' +
+
+            /* Сетка карточек (Победители и Рекомендации) */
+            '.ck-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.8em; margin-bottom: 1.25em; }' +
+            '.ck-grid { display: flex; flex-wrap: wrap; gap: 1.15em; }' +
+            '.ck-item-card { width: calc(33.333% - 0.77em); display: flex; flex-direction: column; border-radius: 1em; overflow: hidden; background: rgba(13,20,34,0.92); border: 1px solid rgba(56,189,248,0.18); transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease; }' +
+            '.ck-item-top { display: flex; gap: 0.95em; padding: 1em; cursor: pointer; flex: 1; }' +
+            '.ck-item-top.focus { background: rgba(30,58,138,0.28); outline: 2px solid #38bdf8; outline-offset: -2px; }' +
+            '.ck-item-thumb { width: 5.5em; height: 8.2em; border-radius: 0.6em; overflow: hidden; flex-shrink: 0; background: #1e293b; }' +
+            '.ck-item-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }' +
+            '.ck-item-body { flex: 1; min-width: 0; }' +
+            '.ck-item-title { font-size: 1.04em; font-weight: 700; color: #fff; margin: 0 0 0.3em; }' +
+            '.ck-item-reason { font-size: 0.84em; line-height: 1.4; color: #93c5fd; margin-top: 0.45em; }' +
+            '.ck-item-actions { display: flex; border-top: 1px solid rgba(148,163,184,0.12); }' +
+            '.ck-item-act { flex: 1; padding: 0.65em; text-align: center; font-size: 0.84em; font-weight: 600; color: #cbd5e1; cursor: pointer; background: rgba(15,23,42,0.65); }' +
+            '.ck-item-act + .ck-item-act { border-left: 1px solid rgba(148,163,184,0.12); }' +
+            '.ck-item-act--del { color: #fca5a5; }' +
+            '.ck-item-act.focus { background: #2563eb; color: #ffffff; }' +
+
+            /* Мой вкус (графики и история) */
+            '.ck-panel { padding: 1.4em 1.6em; border-radius: 1em; background: rgba(13,20,34,0.9); border: 1px solid rgba(56,189,248,0.18); margin-bottom: 1.25em; }' +
+            '.ck-panel-title { font-size: 1.15em; font-weight: 800; color: #fff; margin: 0 0 1em; }' +
+            '.ck-bar-row { margin-bottom: 0.85em; }' +
+            '.ck-bar-head { display: flex; justify-content: space-between; font-size: 0.92em; margin-bottom: 0.35em; color: #e2e8f0; }' +
+            '.ck-bar-track { height: 0.68em; border-radius: 999px; background: rgba(30,41,59,0.9); overflow: hidden; }' +
+            '.ck-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #2563eb, #38bdf8); transition: width 0.6s ease; }' +
+            '.ck-history-row { display: flex; align-items: center; justify-content: space-between; padding: 0.65em 0; border-bottom: 1px solid rgba(148,163,184,0.1); font-size: 0.92em; }' +
+            '.ck-history-win { color: #7dd3fc; font-weight: 700; }' +
+            '.ck-history-lose { color: #94a3b8; }' +
+
+            /* Настройки */
+            '.ck-setting-group { margin-bottom: 1.4em; }' +
+            '.ck-setting-label { font-size: 0.96em; font-weight: 700; color: #e2e8f0; margin-bottom: 0.65em; }' +
+            '.ck-chips { display: flex; flex-wrap: wrap; gap: 0.55em; }' +
+            '.ck-chip { padding: 0.5em 0.95em; border-radius: 0.65em; background: rgba(15,23,42,0.85); border: 1px solid rgba(148,163,184,0.22); color: #cbd5e1; font-size: 0.88em; font-weight: 600; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease; }' +
+            '.ck-chip.is-selected { background: rgba(37,99,235,0.85); border-color: #7dd3fc; color: #fff; }' +
+            '.ck-chip.is-excluded { background: rgba(153,27,27,0.75); border-color: #f87171; color: #fee2e2; text-decoration: line-through; }' +
+            '.ck-chip.focus { transform: scale(1.06); box-shadow: 0 0 0 2px #38bdf8; color: #fff; }' +
+
+            /* Зал славы Царя горы */
+            '.ck-hof-list { display: flex; flex-wrap: wrap; gap: 0.8em; }' +
+            '.ck-hof-item { flex: 1 1 16em; display: flex; align-items: center; gap: 0.8em; padding: 0.8em 1em; border-radius: 0.85em; background: rgba(15,23,42,0.85); border: 1px solid rgba(250,204,21,0.24); cursor: pointer; }' +
+            '.ck-hof-item.focus { border-color: #38bdf8; box-shadow: 0 0 0 2px #38bdf8; }' +
+            '.ck-hof-rank { font-size: 1.3em; font-weight: 900; color: #facc15; width: 1.8em; text-align: center; }' +
+
+            /* Состояния загрузки, пустоты и уведомлений */
+            '.ck-state-box { text-align: center; padding: 3em 1.5em; border-radius: 1em; background: rgba(13,20,34,0.85); border: 1px solid rgba(56,189,248,0.18); }' +
+            '.ck-spinner { width: 2.6em; height: 2.6em; border: 3px solid rgba(56,189,248,0.22); border-top-color: #38bdf8; border-radius: 50%; margin: 0 auto 1em; animation: ckSpin 0.8s linear infinite; }' +
+            '@keyframes ckSpin { to { transform: rotate(360deg); } }' +
+            '.ck-toast { position: fixed; right: 2em; bottom: 2em; z-index: 9999; max-width: 24em; padding: 0.9em 1.3em; border-radius: 0.85em; background: linear-gradient(135deg, rgba(15,23,42,0.96), rgba(30,58,138,0.95)); border: 1px solid #38bdf8; box-shadow: 0 12px 32px rgba(0,0,0,0.55); color: #fff; font-weight: 700; font-size: 0.94em; opacity: 0; transform: translateY(14px); transition: opacity 0.25s ease, transform 0.25s ease; pointer-events: none; }' +
+            '.ck-toast.is-visible { opacity: 1; transform: translateY(0); }' +
+
+            /* Адаптивность под мобильные и узкие экраны */
+            '@media (max-width: 960px) {' +
+                '.ck-battle-wrap { flex-direction: column; }' +
+                '.ck-vs-badge { width: 2.8em; height: 2.8em; font-size: 0.9em; }' +
+                '.ck-item-card { width: calc(50% - 0.6em); }' +
+            '}' +
+            '@media (max-width: 640px) {' +
+                '.ck-root { padding: 0.9em 1em 2.5em; }' +
+                '.ck-hero { padding: 1.5em 1.2em; }' +
+                '.ck-hero-title { font-size: 1.65em; }' +
+                '.ck-card { flex-direction: column; min-height: auto; }' +
+                '.ck-card-poster { width: 100%; min-width: 100%; height: 15em; }' +
+                '.ck-item-card { width: 100%; }' +
+            '}' +
+
+            /* Учёт системной настройки prefers-reduced-motion */
+            '@media (prefers-reduced-motion: reduce) {' +
+                '.ck-view, .ck-card--enter-left, .ck-card--enter-right, .ck-spinner { animation: none !important; }' +
+                '.ck-card, .ck-btn, .ck-tab, .ck-bar-fill, .ck-toast { transition: none !important; }' +
+            '}';
+
+        var style = document.createElement('style');
+        style.id = STYLE_ID;
+        style.type = 'text/css';
+        style.appendChild(document.createTextNode(css));
+        document.head.appendChild(style);
+    }
+
+    // =========================================================================
+    // КОМПОНЕНТ LAMPA: CINEMA KING
+    // =========================================================================
+
+    function CinemaKingComponent(object) {
+        var network = new Lampa.Reguest();
+        var scroll = new Lampa.Scroll({ mask: true, over: true });
+        var html = $('<div class="ck-root"></div>');
+        var topbar = $('<div class="ck-topbar"></div>');
+        var body = $('<div class="ck-body"></div>');
+        var toastEl = $('<div class="ck-toast"></div>');
+
+        var state = StorageManager.load();
+        var activeTab = 'home';
+        var lastFocused = null;
+        var toastTimer = null;
+
+        // Сессионное состояние битвы
+        var battlePool = [];
+        var battleSeen = {};
+        var battlePage = 1;
+        var currentPair = null;
+        var isBattleLoading = false;
+        var isAnimating = false;
+
+        // Сессионное состояние «Царя горы»
+        var kothPool = [];
+        var kothSeen = {};
+        var kothPage = 1;
+        var currentChallenger = null;
+        var isKothLoading = false;
+
+        // Сессионное состояние рекомендаций и сортировки победителей
+        var recsList = [];
+        var recsPage = 1;
+        var isRecsLoading = false;
+        var winnersSort = 'date'; // 'date' | 'wins' | 'rating' | 'title'
+
+        function showToast(message) {
+            if (!message) return;
+            clearTimeout(toastTimer);
+            toastEl.text(message).addClass('is-visible');
+            toastTimer = setTimeout(function () {
+                toastEl.removeClass('is-visible');
+            }, 3200);
+        }
+
+        function openLampaCard(item) {
+            if (!item || !item.id) return;
+            Lampa.Activity.push({
+                url: '',
+                component: 'full',
+                id: item.id,
+                method: item.media_type === 'tv' ? 'tv' : 'movie',
+                card: {
+                    id: item.id,
+                    title: item.title,
+                    name: item.title,
+                    poster_path: item.poster_path || '',
+                    backdrop_path: item.backdrop_path || '',
+                    vote_average: item.rating || 0,
+                    release_date: item.year ? item.year + '-01-01' : '',
+                    first_air_date: item.year ? item.year + '-01-01' : '',
+                    overview: item.overview || ''
+                },
+                source: 'tmdb'
+            });
+        }
+
+        function bindScrollFocus(container) {
+            container.find('.selector').on('hover:focus', function () {
+                lastFocused = this;
+                scroll.update($(this), true);
+            });
+        }
+
+        function refreshFocus(preferredEl) {
+            setTimeout(function () {
+                bindScrollFocus(html);
+                Lampa.Controller.collectionSet(html);
+                var target = preferredEl && preferredEl.length ? preferredEl[0] : null;
+                if (!target) {
+                    var firstBodySelector = body.find('.selector').first();
+                    target = firstBodySelector.length ? firstBodySelector[0] : html.find('.selector').first()[0];
+                }
+                if (target) {
+                    lastFocused = target;
+                    Lampa.Controller.collectionFocus(target, html);
+                }
+            }, 30);
+        }
+
+        // ---------------------------------------------------------------------
+        // ВЕРХНЯЯ НАВИГАЦИЯ
+        // ---------------------------------------------------------------------
+
+        function renderTopbar() {
+            var tabs = [
+                { id: 'home', label: 'Главная' },
+                { id: 'battle', label: 'Игра' },
+                { id: 'koth', label: 'Царь горы' },
+                { id: 'winners', label: 'Мои победители' },
+                { id: 'recs', label: 'Рекомендации' },
+                { id: 'taste', label: 'Мой вкус' },
+                { id: 'settings', label: 'Настройки' }
+            ];
+
+            var crownSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h20L20 7l-5 4-3-6-3 6-5-4-2 11z"/></svg>';
+
+            topbar.empty();
+            var brand = $('<div class="ck-brand"><div class="ck-brand-icon">' + crownSvg + '</div><div class="ck-brand-title">CINEMA KING</div></div>');
+            var nav = $('<div class="ck-nav"></div>');
+
+            for (var i = 0; i < tabs.length; i++) {
+                (function (tab) {
+                    var cls = 'ck-tab selector' + (activeTab === tab.id ? ' is-active' : '');
+                    var btn = $('<div class="' + cls + '">' + esc(tab.label) + '</div>');
+                    btn.on('hover:enter', function () {
+                        switchTab(tab.id);
+                    });
+                    nav.append(btn);
+                })(tabs[i]);
+            }
+
+            topbar.append(brand).append(nav);
+        }
+
+        function switchTab(tabId) {
+            activeTab = tabId;
+            renderTopbar();
+            scroll.reset();
+
+            if (tabId === 'home') renderHome();
+            else if (tabId === 'battle') renderBattle();
+            else if (tabId === 'koth') renderKoth();
+            else if (tabId === 'winners') renderWinners();
+            else if (tabId === 'recs') renderRecs();
+            else if (tabId === 'taste') renderTaste();
+            else if (tabId === 'settings') renderSettings();
+        }
+
+        // ---------------------------------------------------------------------
+        // РАЗДЕЛ 1: ГЛАВНЫЙ ЭКРАН
+        // ---------------------------------------------------------------------
+
+        function renderHome() {
+            var summary = TasteEngine.getTasteSummary(state);
+            var view = $('<div class="ck-view"></div>');
+
+            var hero = $(
+                '<div class="ck-hero">' +
+                    '<div class="ck-hero-badge">Интерактивный подбор кино</div>' +
+                    '<h1 class="ck-hero-title">Найди свой идеальный фильм</h1>' +
+                    '<p class="ck-hero-sub">Выбирай между двумя фильмами. Мы изучим твои предпочтения и подберём кино специально для тебя.</p>' +
+                    '<div class="ck-actions"></div>' +
+                '</div>'
+            );
+
+            var startBtn = $('<div class="ck-btn ck-btn--primary selector">Начать игру</div>');
+            startBtn.on('hover:enter', function () {
+                switchTab('battle');
+            });
+
+            var kothBtn = $('<div class="ck-btn ck-btn--secondary selector">Режим «Царь горы»</div>');
+            kothBtn.on('hover:enter', function () {
+                switchTab('koth');
+            });
+
+            var recsBtn = $('<div class="ck-btn ck-btn--secondary selector">Мои рекомендации</div>');
+            recsBtn.on('hover:enter', function () {
+                switchTab('recs');
+            });
+
+            hero.find('.ck-actions').append(startBtn).append(kothBtn).append(recsBtn);
+
+            var kpi = $(
+                '<div class="ck-kpi-grid">' +
+                    '<div class="ck-kpi-card">' +
+                        '<div class="ck-kpi-label">Проведено сравнений</div>' +
+                        '<div class="ck-kpi-value">' + state.stats.comparisons + '</div>' +
+                    '</div>' +
+                    '<div class="ck-kpi-card">' +
+                        '<div class="ck-kpi-label">Выбрано фильмов</div>' +
+                        '<div class="ck-kpi-value">' + state.winners.length + '</div>' +
+                    '</div>' +
+                    '<div class="ck-kpi-card">' +
+                        '<div class="ck-kpi-label">Твой киновкус</div>' +
+                        '<div class="ck-kpi-text">' + esc(summary) + '</div>' +
+                    '</div>' +
+                '</div>'
+            );
+
+            view.append(hero).append(kpi);
+            body.empty().append(view);
+            refreshFocus(startBtn);
+        }
+
+        // ---------------------------------------------------------------------
+        // ВСПОМОГАТЕЛЬНЫЙ РЕНДЕР БОЛЬШОЙ КАРТОЧКИ БИТВЫ
+        // ---------------------------------------------------------------------
+
+        function buildBattleCard(card, side, opts) {
+            opts = opts || {};
+            var enterCls = side === 'left' ? 'ck-card--enter-left' : 'ck-card--enter-right';
+            var champCls = opts.isChampion ? ' ck-card--champion' : '';
+            var el = $('<div class="ck-card selector ' + enterCls + champCls + '"></div>');
+
+            var posterHtml;
+            if (card.poster) {
+                posterHtml = '<img src="' + esc(card.poster) + '" alt="' + esc(card.title) + '">';
+            } else {
+                posterHtml = '<div class="ck-poster-fallback">' + esc(getInitials(card.title)) + '</div>';
+            }
+
+            var ribbonHtml = '';
+            if (opts.ribbonText) {
+                ribbonHtml = '<div class="ck-card-ribbon' + (opts.ribbonChallenger ? ' ck-card-ribbon--challenger' : '') + '">' + esc(opts.ribbonText) + '</div>';
+            }
+
+            var genresHtml = '';
+            var gList = (card.genres || []).slice(0, 3);
+            for (var i = 0; i < gList.length; i++) {
+                var gName = getGenreName(gList[i]);
+                if (gName) genresHtml += '<span class="ck-genre-chip">' + esc(gName) + '</span>';
+            }
+
+            var ratingText = card.rating ? '★ ' + card.rating : 'Нет оценки';
+            var yearText = card.year ? card.year : 'Год неизвестен';
+            var runtimeText = card.runtime ? formatRuntime(card.runtime) : '';
+            var overviewText = card.overview || 'Описание отсутствует в каталоге.';
+
+            el.html(
+                '<div class="ck-card-poster">' + posterHtml + ribbonHtml + '</div>' +
+                '<div class="ck-card-info">' +
+                    '<div>' +
+                        '<h2 class="ck-card-title">' + esc(card.title) + '</h2>' +
+                        '<div class="ck-meta-row">' +
+                            '<span class="ck-rating-pill">' + esc(ratingText) + '</span>' +
+                            '<span>' + esc(yearText) + '</span>' +
+                            '<span class="ck-runtime-slot">' + esc(runtimeText) + '</span>' +
+                        '</div>' +
+                        '<div class="ck-genres">' + genresHtml + '</div>' +
+                        '<p class="ck-overview">' + esc(overviewText) + '</p>' +
+                    '</div>' +
+                    '<div class="ck-card-cta">' + esc(opts.ctaText || 'Выбрать этот фильм') + '</div>' +
+                '</div>'
+            );
+
+            // Обработка ошибки загрузки постера
+            el.find('img').on('error', function () {
+                $(this).replaceWith('<div class="ck-poster-fallback">' + esc(getInitials(card.title)) + '</div>');
+            });
+
+            // Подгрузка продолжительности в фоне без задержки интерфейса
+            if (!card.runtime) {
+                CatalogService.fetchRuntime(network, card, function (mins) {
+                    el.find('.ck-runtime-slot').text('• ' + formatRuntime(mins));
+                });
+            } else {
+                el.find('.ck-runtime-slot').text('• ' + runtimeText);
+            }
+
+            return el;
+        }
+
+        // ---------------------------------------------------------------------
+        // ЗАГРУЗКА ПУЛА ФИЛЬМОВ ДЛЯ ИГРЫ
+        // ---------------------------------------------------------------------
+
+        function loadPoolBatch(targetPool, pageNum, useTasteBoost, onDone, onFail) {
+            var s = state.settings;
+            var mediaType = s.contentType === 'all' ? (pageNum % 2 === 0 ? 'tv' : 'movie') : s.contentType;
+            var withGenres = '';
+
+            // Когда набрана статистика, чередуем персонализированный и общий пул
+            if (useTasteBoost && state.stats.comparisons >= 4 && pageNum % 2 === 0) {
+                var topG = TasteEngine.getTopGenres(state, 2);
+                if (topG.length) {
+                    withGenres = topG.map(function (g) { return g.id; }).join('|');
+                }
+            }
+
+            CatalogService.fetchDiscover(network, {
+                mediaType: mediaType,
+                page: pageNum,
+                minRating: s.minRating,
+                period: s.period,
+                excludedGenres: s.excludedGenres,
+                withGenres: withGenres,
+                sortBy: pageNum % 3 === 0 ? 'vote_average.desc' : 'popularity.desc'
+            }, function (items) {
+                // Если строгие фильтры дали мало результатов, смягчаем запрос
+                if (items.length < 4 && (s.minRating > 0 || s.period !== 'all' || withGenres)) {
+                    CatalogService.fetchDiscover(network, {
+                        mediaType: mediaType,
+                        page: pageNum,
+                        minRating: 0,
+                        period: 'all',
+                        excludedGenres: s.excludedGenres,
+                        sortBy: 'popularity.desc',
+                        minVotes: 50
+                    }, function (fallbackItems) {
+                        mergeUnique(targetPool, fallbackItems);
+                        onDone(targetPool.length);
+                    }, onFail);
+                    return;
+                }
+                mergeUnique(targetPool, items);
+                onDone(targetPool.length);
+            }, onFail);
+        }
+
+        function mergeUnique(pool, items) {
+            var existing = {};
+            var i;
+            for (i = 0; i < pool.length; i++) existing[cardKey(pool[i])] = true;
+            for (i = 0; i < items.length; i++) {
+                var k = cardKey(items[i]);
+                if (!existing[k]) {
+                    existing[k] = true;
+                    pool.push(items[i]);
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // РАЗДЕЛ 2: ОСНОВНОЙ РЕЖИМ — БИТВА ФИЛЬМОВ
+        // ---------------------------------------------------------------------
+
+        function renderBattle() {
+            if (!currentPair) {
+                var next = TasteEngine.pickNextPair(state, battlePool, battleSeen);
+                if (next) {
+                    currentPair = next;
+                } else {
+                    fetchMoreForBattle();
+                    return;
+                }
+            }
+
+            var leftCard = currentPair[0];
+            var rightCard = currentPair[1];
+            battleSeen[cardKey(leftCard)] = true;
+            battleSeen[cardKey(rightCard)] = true;
+
+            var view = $('<div class="ck-view"></div>');
+            view.append(
+                '<div class="ck-arena-head">' +
+                    '<div class="ck-arena-title">Битва фильмов • Раунд ' + (state.stats.comparisons + 1) + '</div>' +
+                    '<div class="ck-arena-meta">Выбери лучший вариант, чтобы обучить подборку</div>' +
+                '</div>'
+            );
+
+            var wrap = $('<div class="ck-battle-wrap"><div class="ck-vs-badge">VS</div></div>');
+            var elLeft = buildBattleCard(leftCard, 'left', { ctaText: 'Выбрать фильм №1' });
+            var elRight = buildBattleCard(rightCard, 'right', { ctaText: 'Выбрать фильм №2' });
+
+            function handlePick(winner, loser, winEl, loseEl, loseSide) {
+                if (isAnimating) return;
+                isAnimating = true;
+
+                winEl.addClass('ck-card--win');
+                loseEl.addClass(loseSide === 'left' ? 'ck-card--lose-left' : 'ck-card--lose-right');
+
+                TasteEngine.recordBattleChoice(state, winner, loser);
+
+                // Эффекты при достижении вех
+                var c = state.stats.comparisons;
+                if (c === 5) showToast('Отличный старт! 5 сравнений — профиль вкуса начал формироваться.');
+                else if (c === 10) showToast('Достижение: 10 битв! Персональные рекомендации стали точнее.');
+                else if (c === 25) showToast('Киноман: 25 сравнений пройдено!');
+                else if (c === 50) showToast('Мастер Cinema King: 50 битв позади!');
+
+                var delay = isReducedMotion() ? 90 : 480;
+                setTimeout(function () {
+                    isAnimating = false;
+                    currentPair = null;
+                    if (activeTab === 'battle') renderBattle();
+                }, delay);
+            }
+
+            elLeft.on('hover:enter', function () {
+                handlePick(leftCard, rightCard, elLeft, elRight, 'right');
+            });
+            elRight.on('hover:enter', function () {
+                handlePick(rightCard, leftCard, elRight, elLeft, 'left');
+            });
+
+            wrap.append(elLeft).append(elRight);
+
+            var footer = $('<div class="ck-battle-footer"></div>');
+            var skipBtn = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector">Пропустить пару</div>');
+            skipBtn.on('hover:enter', function () {
+                if (isAnimating) return;
+                currentPair = null;
+                renderBattle();
+            });
+
+            var openLeftBtn = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector">Подробнее о №1</div>');
+            openLeftBtn.on('hover:enter', function () { openLampaCard(leftCard); });
+
+            var openRightBtn = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector">Подробнее о №2</div>');
+            openRightBtn.on('hover:enter', function () { openLampaCard(rightCard); });
+
+            footer.append(openLeftBtn).append(skipBtn).append(openRightBtn);
+
+            view.append(wrap).append(footer);
+            body.empty().append(view);
+            refreshFocus(elLeft);
+
+            // Заранее подгружаем следующую страницу, если пул подходит к концу
+            var unseenCount = 0;
+            for (var i = 0; i < battlePool.length; i++) {
+                if (!battleSeen[cardKey(battlePool[i])]) unseenCount++;
+            }
+            if (unseenCount < 6 && !isBattleLoading) {
+                isBattleLoading = true;
+                battlePage += 1;
+                loadPoolBatch(battlePool, battlePage, true, function () {
+                    isBattleLoading = false;
+                }, function () {
+                    isBattleLoading = false;
+                });
+            }
+        }
+
+        function fetchMoreForBattle() {
+            body.html('<div class="ck-state-box"><div class="ck-spinner"></div><div>Подбираем фильмы из каталога...</div></div>');
+            isBattleLoading = true;
+
+            loadPoolBatch(battlePool, battlePage, true, function () {
+                isBattleLoading = false;
+                battlePage += 1;
+                var pair = TasteEngine.pickNextPair(state, battlePool, battleSeen);
+                if (pair) {
+                    currentPair = pair;
+                    if (activeTab === 'battle') renderBattle();
+                } else {
+                    renderErrorState('Не удалось найти достаточно уникальных фильмов по текущим фильтрам.', function () {
+                        battleSeen = {};
+                        battlePool = [];
+                        battlePage = 1;
+                        renderBattle();
+                    });
+                }
+            }, function () {
+                isBattleLoading = false;
+                renderErrorState('Ошибка сети при загрузке каталога TMDB. Проверьте соединение или прокси в настройках Lampa.', function () {
+                    renderBattle();
+                });
+            });
+        }
+
+        // ---------------------------------------------------------------------
+        // РАЗДЕЛ 3: РЕЖИМ «ЦАРЬ ГОРЫ» (ОТДЕЛЬНАЯ МЕХАНИКА)
+        // ---------------------------------------------------------------------
+
+        function getNextKothCard() {
+            for (var i = 0; i < kothPool.length; i++) {
+                var c = kothPool[i];
+                var k = cardKey(c);
+                var isChamp = state.koth.champion && cardKey(state.koth.champion) === k;
+                if (!kothSeen[k] && !isChamp) {
+                    kothSeen[k] = true;
+                    return c;
+                }
+            }
+            return null;
+        }
+
+        function updateHallOfFame(card, streak) {
+            if (!card || streak < 1) return;
+            var hof = state.koth.hallOfFame;
+            var found = null;
+            for (var i = 0; i < hof.length; i++) {
+                if (hof[i].card.id === card.id && hof[i].card.media_type === card.media_type) {
+                    found = hof[i];
+                    break;
+                }
+            }
+            if (found) {
+                if (streak > found.maxStreak) found.maxStreak = streak;
+                found.date = Date.now();
+            } else {
+                hof.push({
+                    card: {
+                        id: card.id,
+                        media_type: card.media_type,
+                        title: card.title,
+                        year: card.year,
+                        poster_path: card.poster_path,
+                        backdrop_path: card.backdrop_path,
+                        poster: card.poster,
+                        rating: card.rating,
+                        overview: card.overview
+                    },
+                    maxStreak: streak,
+                    date: Date.now()
+                });
+            }
+            hof.sort(function (a, b) {
+                return b.maxStreak - a.maxStreak;
+            });
+            if (hof.length > 20) state.koth.hallOfFame = hof.slice(0, 20);
+        }
+
+        function renderKoth() {
+            if (!state.koth.champion) {
+                var firstChamp = getNextKothCard();
+                if (!firstChamp) {
+                    fetchMoreForKoth();
+                    return;
+                }
+                state.koth.champion = firstChamp;
+                state.koth.streak = 0;
+                state.koth.round = 1;
+                StorageManager.save(state);
+            }
+
+            if (!currentChallenger) {
+                currentChallenger = getNextKothCard();
+                if (!currentChallenger) {
+                    fetchMoreForKoth();
+                    return;
+                }
+            }
+
+            var champ = state.koth.champion;
+            var chal = currentChallenger;
+
+            var view = $('<div class="ck-view"></div>');
+            view.append(
+                '<div class="ck-arena-head">' +
+                    '<div class="ck-arena-title">Царь горы • Раунд ' + state.koth.round + '</div>' +
+                    '<div class="ck-arena-meta">Победитель остаётся на троне (не влияет на обычные рекомендации)</div>' +
+                '</div>'
+            );
+
+            var wrap = $('<div class="ck-battle-wrap"><div class="ck-vs-badge">VS</div></div>');
+            var elChamp = buildBattleCard(champ, 'left', {
+                isChampion: true,
+                ribbonText: 'ЧЕМПИОН • Побед: ' + state.koth.streak,
+                ctaText: 'Оставить чемпиона'
+            });
+            var elChal = buildBattleCard(chal, 'right', {
+                ribbonText: 'ПРЕТЕНДЕНТ',
+                ribbonChallenger: true,
+                ctaText: 'Свергнуть чемпиона'
+            });
+
+            function pickKoth(winnerIsChamp) {
+                if (isAnimating) return;
+                isAnimating = true;
+
+                if (winnerIsChamp) {
+                    elChamp.addClass('ck-card--win');
+                    elChal.addClass('ck-card--lose-right');
+                    state.koth.streak += 1;
+                    state.koth.round += 1;
+                    updateHallOfFame(champ, state.koth.streak);
+
+                    if (state.koth.streak === 3) showToast('Серия из 3 побед! «' + champ.title + '» держит вершину.');
+                    else if (state.koth.streak === 5) showToast('Непобедимый чемпион: 5 побед подряд!');
+                    else if (state.koth.streak === 10) showToast('Легенда Cinema King: 10 побед подряд!');
+                } else {
+                    elChal.addClass('ck-card--win');
+                    elChamp.addClass('ck-card--lose-left');
+                    if (state.koth.streak >= 1) {
+                        updateHallOfFame(champ, state.koth.streak);
+                    }
+                    state.koth.champion = chal;
+                    state.koth.streak = 1;
+                    state.koth.round += 1;
+                    updateHallOfFame(chal, 1);
+                    showToast('Новый чемпион: «' + chal.title + '»!');
+                }
+
+                StorageManager.save(state);
+
+                var delay = isReducedMotion() ? 90 : 480;
+                setTimeout(function () {
+                    isAnimating = false;
+                    currentChallenger = null;
+                    if (activeTab === 'koth') renderKoth();
+                }, delay);
+            }
+
+            elChamp.on('hover:enter', function () { pickKoth(true); });
+            elChal.on('hover:enter', function () { pickKoth(false); });
+
+            wrap.append(elChamp).append(elChal);
+
+            var footer = $('<div class="ck-battle-footer"></div>');
+            var newTourneyBtn = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector">Начать новый турнир</div>');
+            newTourneyBtn.on('hover:enter', function () {
+                state.koth.champion = null;
+                state.koth.streak = 0;
+                state.koth.round = 1;
+                currentChallenger = null;
+                StorageManager.save(state);
+                renderKoth();
+            });
+            footer.append(newTourneyBtn);
+
+            view.append(wrap).append(footer);
+
+            // Личный рейтинг победителей «Царя горы»
+            if (state.koth.hallOfFame.length) {
+                var hofPanel = $('<div class="ck-panel" style="margin-top: 1.5em;"><div class="ck-panel-title">Личный рейтинг «Царя горы»</div><div class="ck-hof-list"></div></div>');
+                var hofList = hofPanel.find('.ck-hof-list');
+                var limit = Math.min(6, state.koth.hallOfFame.length);
+
+                for (var i = 0; i < limit; i++) {
+                    (function (entry, rank) {
+                        var row = $(
+                            '<div class="ck-hof-item selector">' +
+                                '<div class="ck-hof-rank">#' + rank + '</div>' +
+                                '<div>' +
+                                    '<div style="font-weight:700;color:#fff;">' + esc(entry.card.title) + '</div>' +
+                                    '<div style="font-size:0.84em;color:#7dd3fc;">Серия побед: ' + entry.maxStreak + (entry.card.year ? ' • ' + esc(entry.card.year) : '') + '</div>' +
+                                '</div>' +
+                            '</div>'
+                        );
+                        row.on('hover:enter', function () {
+                            openLampaCard(entry.card);
+                        });
+                        hofList.append(row);
+                    })(state.koth.hallOfFame[i], i + 1);
+                }
+                view.append(hofPanel);
+            }
+
+            body.empty().append(view);
+            refreshFocus(elChamp);
+        }
+
+        function fetchMoreForKoth() {
+            body.html('<div class="ck-state-box"><div class="ck-spinner"></div><div>Готовим претендентов для «Царя горы»...</div></div>');
+            if (isKothLoading) return;
+            isKothLoading = true;
+
+            loadPoolBatch(kothPool, kothPage, false, function () {
+                isKothLoading = false;
+                kothPage += 1;
+                if (kothPool.length >= 2) {
+                    if (activeTab === 'koth') renderKoth();
+                } else {
+                    renderErrorState('Недостаточно фильмов для запуска режима «Царь горы».', function () {
+                        kothSeen = {};
+                        kothPool = [];
+                        kothPage = 1;
+                        renderKoth();
+                    });
+                }
+            }, function () {
+                isKothLoading = false;
+                renderErrorState('Не удалось загрузить претендентов из каталога.', function () {
+                    renderKoth();
+                });
+            });
+        }
+
+        // ---------------------------------------------------------------------
+        // РАЗДЕЛ 4: МОИ ПОБЕДИТЕЛИ
+        // ---------------------------------------------------------------------
+
+        function renderWinners() {
+            var view = $('<div class="ck-view"></div>');
+
+            if (!state.winners.length) {
+                var empty = $(
+                    '<div class="ck-state-box">' +
+                        '<h3 style="margin:0 0 0.5em;">Список победителей пока пуст</h3>' +
+                        '<p style="color:#94a3b8;margin:0 0 1.2em;">Сыграй в «Битву фильмов», и все выбранные тобой картины появятся здесь.</p>' +
+                    '</div>'
+                );
+                var goBtn = $('<div class="ck-btn ck-btn--primary selector">Перейти к игре</div>');
+                goBtn.on('hover:enter', function () { switchTab('battle'); });
+                empty.append(goBtn);
+                view.append(empty);
+                body.empty().append(view);
+                refreshFocus(goBtn);
+                return;
+            }
+
+            var toolbar = $('<div class="ck-toolbar"><div class="ck-arena-title">Мои победители (' + state.winners.length + ')</div><div class="ck-chips"></div></div>');
+            var sorts = [
+                { id: 'date', label: 'По дате' },
+                { id: 'wins', label: 'По победам' },
+                { id: 'rating', label: 'По рейтингу' },
+                { id: 'title', label: 'По названию' }
+            ];
+
+            for (var s = 0; s < sorts.length; s++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (winnersSort === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        winnersSort = opt.id;
+                        renderWinners();
+                    });
+                    toolbar.find('.ck-chips').append(chip);
+                })(sorts[s]);
+            }
+
+            var list = state.winners.slice();
+            list.sort(function (a, b) {
+                if (winnersSort === 'wins') return (b.wins || 1) - (a.wins || 1);
+                if (winnersSort === 'rating') return (b.rating || 0) - (a.rating || 0);
+                if (winnersSort === 'title') return String(a.title).localeCompare(String(b.title));
+                return (b.lastWon || 0) - (a.lastWon || 0);
+            });
+
+            var grid = $('<div class="ck-grid"></div>');
+            for (var i = 0; i < list.length; i++) {
+                (function (item) {
+                    var thumb = item.poster
+                        ? '<img src="' + esc(item.poster) + '" alt="' + esc(item.title) + '">'
+                        : '<div class="ck-poster-fallback" style="font-size:1.4em;">' + esc(getInitials(item.title)) + '</div>';
+
+                    var cardEl = $(
+                        '<div class="ck-item-card">' +
+                            '<div class="ck-item-top selector">' +
+                                '<div class="ck-item-thumb">' + thumb + '</div>' +
+                                '<div class="ck-item-body">' +
+                                    '<div class="ck-item-title">' + esc(item.title) + '</div>' +
+                                    '<div class="ck-meta-row" style="margin-bottom:0.4em;">' +
+                                        '<span class="ck-rating-pill">' + (item.rating ? '★ ' + item.rating : '—') + '</span>' +
+                                        '<span>' + esc(item.year || '') + '</span>' +
+                                    '</div>' +
+                                    '<div style="font-size:0.84em;color:#7dd3fc;">Побед в битвах: ' + (item.wins || 1) + '</div>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="ck-item-actions">' +
+                                '<div class="ck-item-act selector ck-act-open">Открыть в Lampa</div>' +
+                                '<div class="ck-item-act ck-item-act--del selector ck-act-del">Удалить</div>' +
+                            '</div>' +
+                        '</div>'
+                    );
+
+                    cardEl.find('img').on('error', function () {
+                        $(this).replaceWith('<div class="ck-poster-fallback" style="font-size:1.4em;">' + esc(getInitials(item.title)) + '</div>');
+                    });
+                    cardEl.find('.ck-item-top, .ck-act-open').on('hover:enter', function () {
+                        openLampaCard(item);
+                    });
+                    cardEl.find('.ck-act-del').on('hover:enter', function () {
+                        state.winners = state.winners.filter(function (w) {
+                            return !(w.id === item.id && w.media_type === item.media_type);
+                        });
+                        StorageManager.save(state);
+                        showToast('Удалено из списка победителей.');
+                        renderWinners();
+                    });
+
+                    grid.append(cardEl);
+                })(list[i]);
+            }
+
+            view.append(toolbar).append(grid);
+            body.empty().append(view);
+            refreshFocus(grid.find('.selector').first());
+        }
+
+        // ---------------------------------------------------------------------
+        // РАЗДЕЛ 5: ПЕРСОНАЛЬНЫЕ РЕКОМЕНДАЦИИ
+        // ---------------------------------------------------------------------
+
+        function renderRecs(forceReload) {
+            if (!forceReload && recsList.length) {
+                drawRecsList();
+                return;
+            }
+            if (isRecsLoading) return;
+            isRecsLoading = true;
+
+            body.html('<div class="ck-state-box"><div class="ck-spinner"></div><div>Подбираем персональные рекомендации на основе твоих выборов...</div></div>');
+
+            var topGenres = TasteEngine.getTopGenres(state, 2);
+            var withGenres = topGenres.length ? topGenres.map(function (g) { return g.id; }).join('|') : '';
+            var preferredType = state.settings.contentType;
+            if (preferredType === 'all') {
+                preferredType = state.typeScores.tv > state.typeScores.movie ? 'tv' : 'movie';
+            }
+
+            CatalogService.fetchDiscover(network, {
+                mediaType: preferredType,
+                page: recsPage,
+                minRating: Math.max(6.2, state.settings.minRating || 0),
+                period: state.settings.period,
+                excludedGenres: state.settings.excludedGenres,
+                withGenres: withGenres,
+                sortBy: 'popularity.desc',
+                minVotes: 150
+            }, function (items) {
+                isRecsLoading = false;
+
+                // Исключаем уже выигравшие фильмы
+                var wonMap = {};
+                var i;
+                for (i = 0; i < state.winners.length; i++) {
+                    wonMap[cardKey(state.winners[i])] = true;
+                }
+
+                var filtered = [];
+                for (i = 0; i < items.length; i++) {
+                    if (!wonMap[cardKey(items[i])]) {
+                        filtered.push({
+                            card: items[i],
+                            match: TasteEngine.scoreCard(state, items[i]),
+                            reason: TasteEngine.explainRecommendation(state, items[i])
+                        });
+                    }
+                }
+
+                filtered.sort(function (a, b) {
+                    return b.match - a.match;
+                });
+
+                recsList = filtered.slice(0, 12);
+                if (activeTab === 'recs') {
+                    if (recsList.length) drawRecsList();
+                    else {
+                        renderErrorState('По текущим фильтрам рекомендаций не найдено. Попробуй обновить подборку или смягчить фильтры.', function () {
+                            recsPage = 1;
+                            renderRecs(true);
+                        });
+                    }
+                }
+            }, function () {
+                isRecsLoading = false;
+                renderErrorState('Ошибка загрузки рекомендаций из TMDB.', function () {
+                    renderRecs(true);
+                });
+            });
+        }
+
+        function drawRecsList() {
+            var view = $('<div class="ck-view"></div>');
+
+            var toolbar = $('<div class="ck-toolbar"><div class="ck-arena-title">Персональные рекомендации</div></div>');
+            var refreshBtn = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector">Обновить подборку</div>');
+            refreshBtn.on('hover:enter', function () {
+                recsPage = recsPage >= 5 ? 1 : recsPage + 1;
+                recsList = [];
+                renderRecs(true);
+            });
+            toolbar.append(refreshBtn);
+            view.append(toolbar);
+
+            if (state.stats.comparisons < 3) {
+                view.append('<div class="ck-panel" style="padding:1em 1.2em;color:#93c5fd;">Пока собрано мало данных (' + state.stats.comparisons + ' сравнений). Сыграй ещё пару раундов, чтобы рекомендации точнее отражали твой вкус.</div>');
+            }
+
+            var grid = $('<div class="ck-grid"></div>');
+            for (var i = 0; i < recsList.length; i++) {
+                (function (entry) {
+                    var c = entry.card;
+                    var thumb = c.poster
+                        ? '<img src="' + esc(c.poster) + '" alt="' + esc(c.title) + '">'
+                        : '<div class="ck-poster-fallback" style="font-size:1.4em;">' + esc(getInitials(c.title)) + '</div>';
+
+                    var gNames = [];
+                    for (var g = 0; g < Math.min(3, (c.genres || []).length); g++) {
+                        var nm = getGenreName(c.genres[g]);
+                        if (nm) gNames.push(nm);
+                    }
+
+                    var cardEl = $(
+                        '<div class="ck-item-card">' +
+                            '<div class="ck-item-top selector">' +
+                                '<div class="ck-item-thumb">' + thumb + '</div>' +
+                                '<div class="ck-item-body">' +
+                                    '<div class="ck-item-title">' + esc(c.title) + '</div>' +
+                                    '<div class="ck-meta-row" style="margin-bottom:0.35em;">' +
+                                        '<span class="ck-rating-pill">' + (c.rating ? '★ ' + c.rating : '—') + '</span>' +
+                                        '<span>' + esc(c.year || '') + '</span>' +
+                                        '<span style="color:#38bdf8;font-weight:700;">' + entry.match + '%</span>' +
+                                    '</div>' +
+                                    '<div style="font-size:0.78em;color:#94a3b8;">' + esc(gNames.join(' • ')) + '</div>' +
+                                    '<div class="ck-item-reason">' + esc(entry.reason) + '</div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>'
+                    );
+
+                    cardEl.find('img').on('error', function () {
+                        $(this).replaceWith('<div class="ck-poster-fallback" style="font-size:1.4em;">' + esc(getInitials(c.title)) + '</div>');
+                    });
+                    cardEl.find('.ck-item-top').on('hover:enter', function () {
+                        openLampaCard(c);
+                    });
+                    grid.append(cardEl);
+                })(recsList[i]);
+            }
+
+            view.append(grid);
+            body.empty().append(view);
+            refreshFocus(grid.find('.selector').first());
+        }
+
+        // ---------------------------------------------------------------------
+        // РАЗДЕЛ 6: МОЙ ВКУС (СТАТИСТИКА И ГРАФИКИ)
+        // ---------------------------------------------------------------------
+
+        function renderTaste() {
+            var view = $('<div class="ck-view"></div>');
+            var topGenres = TasteEngine.getTopGenres(state, 7);
+            var avgRating = TasteEngine.getAveragePreferredRating(state);
+            var topDec = TasteEngine.getTopDecade(state);
+
+            var kpi = $(
+                '<div class="ck-kpi-grid" style="margin-bottom:1.25em;">' +
+                    '<div class="ck-kpi-card"><div class="ck-kpi-label">Всего сравнений</div><div class="ck-kpi-value">' + state.stats.comparisons + '</div></div>' +
+                    '<div class="ck-kpi-card"><div class="ck-kpi-label">Уникальных побед</div><div class="ck-kpi-value">' + state.winners.length + '</div></div>' +
+                    '<div class="ck-kpi-card"><div class="ck-kpi-label">Средний рейтинг выбора</div><div class="ck-kpi-value">' + (avgRating ? '★ ' + avgRating : '—') + '</div></div>' +
+                    '<div class="ck-kpi-card"><div class="ck-kpi-label">Любимая эпоха</div><div class="ck-kpi-value" style="font-size:1.4em;">' + esc(topDec ? decadeLabel(topDec) : '—') + '</div></div>' +
+                '</div>'
+            );
+            view.append(kpi);
+
+            // Горизонтальные индикаторы любимых жанров
+            var genrePanel = $('<div class="ck-panel"><div class="ck-panel-title">Любимые жанры</div></div>');
+            if (!topGenres.length) {
+                genrePanel.append('<div style="color:#94a3b8;">Пока нет данных. Проведи несколько сравнений в игре!</div>');
+            } else {
+                for (var i = 0; i < topGenres.length; i++) {
+                    var g = topGenres[i];
+                    genrePanel.append(
+                        '<div class="ck-bar-row">' +
+                            '<div class="ck-bar-head"><span>' + esc(g.name) + '</span><span style="color:#7dd3fc;font-weight:700;">' + g.percent + '%</span></div>' +
+                            '<div class="ck-bar-track"><div class="ck-bar-fill" style="width:' + g.percent + '%;"></div></div>' +
+                        '</div>'
+                    );
+                }
+            }
+            view.append(genrePanel);
+
+            // История последних выборов
+            var histPanel = $('<div class="ck-panel"><div class="ck-panel-title">Последние выборы</div></div>');
+            if (!state.history.length) {
+                histPanel.append('<div style="color:#94a3b8;">История сравнений пуста.</div>');
+            } else {
+                var maxH = Math.min(12, state.history.length);
+                for (var h = 0; h < maxH; h++) {
+                    var row = state.history[h];
+                    histPanel.append(
+                        '<div class="ck-history-row">' +
+                            '<span class="ck-history-win">✓ ' + esc(row.winnerTitle) + '</span>' +
+                            '<span class="ck-history-lose">против «' + esc(row.loserTitle) + '»</span>' +
+                        '</div>'
+                    );
+                }
+            }
+            view.append(histPanel);
+
+            body.empty().append(view);
+            refreshFocus(topbar.find('.is-active'));
+        }
+
+        // ---------------------------------------------------------------------
+        // РАЗДЕЛ 7: НАСТРОЙКИ
+        // ---------------------------------------------------------------------
+
+        function renderSettings() {
+            var view = $('<div class="ck-view"></div>');
+            var panel = $('<div class="ck-panel"><div class="ck-panel-title">Настройки подбора</div></div>');
+
+            function invalidatePools() {
+                battlePool = [];
+                battlePage = 1;
+                currentPair = null;
+                kothPool = [];
+                kothPage = 1;
+                currentChallenger = null;
+                recsList = [];
+                recsPage = 1;
+                StorageManager.save(state);
+            }
+
+            // 1. Тип контента
+            var typeGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Тип контента</div><div class="ck-chips"></div></div>');
+            for (var i = 0; i < CONTENT_OPTIONS.length; i++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (state.settings.contentType === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        state.settings.contentType = opt.id;
+                        invalidatePools();
+                        renderSettings();
+                    });
+                    typeGroup.find('.ck-chips').append(chip);
+                })(CONTENT_OPTIONS[i]);
+            }
+            panel.append(typeGroup);
+
+            // 2. Минимальный рейтинг
+            var ratGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Минимальный рейтинг</div><div class="ck-chips"></div></div>');
+            for (var r = 0; r < RATING_OPTIONS.length; r++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (state.settings.minRating === opt.value ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        state.settings.minRating = opt.value;
+                        invalidatePools();
+                        renderSettings();
+                    });
+                    ratGroup.find('.ck-chips').append(chip);
+                })(RATING_OPTIONS[r]);
+            }
+            panel.append(ratGroup);
+
+            // 3. Предпочтительный период выпуска
+            var perGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Период выпуска</div><div class="ck-chips"></div></div>');
+            for (var p = 0; p < PERIOD_OPTIONS.length; p++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (state.settings.period === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        state.settings.period = opt.id;
+                        invalidatePools();
+                        renderSettings();
+                    });
+                    perGroup.find('.ck-chips').append(chip);
+                })(PERIOD_OPTIONS[p]);
+            }
+            panel.append(perGroup);
+
+            // 4. Исключение жанров
+            var exGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Исключить жанры (нажми, чтобы скрыть из игры)</div><div class="ck-chips"></div></div>');
+            for (var g = 0; g < SELECTABLE_GENRES.length; g++) {
+                (function (gid) {
+                    var isEx = state.settings.excludedGenres.indexOf(gid) !== -1;
+                    var chip = $('<div class="ck-chip selector' + (isEx ? ' is-excluded' : '') + '">' + esc(getGenreName(gid)) + '</div>');
+                    chip.on('hover:enter', function () {
+                        var idx = state.settings.excludedGenres.indexOf(gid);
+                        if (idx === -1) state.settings.excludedGenres.push(gid);
+                        else state.settings.excludedGenres.splice(idx, 1);
+                        invalidatePools();
+                        renderSettings();
+                    });
+                    exGroup.find('.ck-chips').append(chip);
+                })(SELECTABLE_GENRES[g]);
+            }
+            panel.append(exGroup);
+
+            // 5. Сброс данных
+            var resetPanel = $('<div class="ck-panel"><div class="ck-panel-title">Управление данными</div><div class="ck-actions"></div></div>');
+
+            var resetTasteBtn = $('<div class="ck-btn ck-btn--danger selector">Сбросить статистику и вкусы</div>');
+            resetTasteBtn.on('hover:enter', function () {
+                state.stats = { comparisons: 0, wins: 0 };
+                state.genreScores = {};
+                state.decadeScores = {};
+                state.typeScores = { movie: 0, tv: 0 };
+                state.ratingSum = 0;
+                state.ratingCount = 0;
+                recsList = [];
+                StorageManager.save(state);
+                showToast('Статистика и профиль предпочтений сброшены.');
+            });
+
+            var resetHistBtn = $('<div class="ck-btn ck-btn--danger selector">Сбросить историю и победителей</div>');
+            resetHistBtn.on('hover:enter', function () {
+                state.winners = [];
+                state.history = [];
+                state.koth = { champion: null, streak: 0, round: 1, hallOfFame: [] };
+                battleSeen = {};
+                kothSeen = {};
+                StorageManager.save(state);
+                showToast('История сравнений, победители и Зал славы очищены.');
+            });
+
+            resetPanel.find('.ck-actions').append(resetTasteBtn).append(resetHistBtn);
+
+            view.append(panel).append(resetPanel);
+            body.empty().append(view);
+            refreshFocus(panel.find('.selector').first());
+        }
+
+        // ---------------------------------------------------------------------
+        // ЭКРАН ОШИБКИ
+        // ---------------------------------------------------------------------
+
+        function renderErrorState(message, onRetry) {
+            var box = $('<div class="ck-state-box"><div style="margin-bottom:1.1em;color:#fca5a5;">' + esc(message) + '</div></div>');
+            var retryBtn = $('<div class="ck-btn ck-btn--primary selector">Повторить</div>');
+            retryBtn.on('hover:enter', function () {
+                if (onRetry) onRetry();
+            });
+            box.append(retryBtn);
+            body.empty().append(box);
+            refreshFocus(retryBtn);
+        }
+
+        // ---------------------------------------------------------------------
+        // ЖИЗНЕННЫЙ ЦИКЛ КОМПОНЕНТА LAMPA
+        // ---------------------------------------------------------------------
+
+        this.create = function () {
+            injectStyles();
+            html.append(topbar).append(body);
+            scroll.append(html);
+            $('body').append(toastEl);
+
+            renderTopbar();
+            renderHome();
+            return this.render();
+        };
+
+        this.start = function () {
+            Lampa.Controller.add('content', {
+                toggle: function () {
+                    Lampa.Controller.collectionSet(html);
+                    Lampa.Controller.collectionFocus(lastFocused || false, html);
+                },
+                left: function () {
+                    if (Navigator.canmove('left')) Navigator.move('left');
+                    else Lampa.Controller.toggle('menu');
+                },
+                right: function () {
+                    if (Navigator.canmove('right')) Navigator.move('right');
+                },
+                up: function () {
+                    if (Navigator.canmove('up')) Navigator.move('up');
+                    else Lampa.Controller.toggle('head');
+                },
+                down: function () {
+                    if (Navigator.canmove('down')) Navigator.move('down');
+                },
+                back: function () {
+                    if (activeTab !== 'home') {
+                        switchTab('home');
+                    } else {
+                        Lampa.Activity.backward();
+                    }
+                }
+            });
+
+            Lampa.Controller.toggle('content');
+        };
+
+        this.pause = function () {};
+        this.stop = function () {};
+
+        this.render = function () {
+            return scroll.render();
+        };
+
+        this.destroy = function () {
+            clearTimeout(toastTimer);
+            network.clear();
+            scroll.destroy();
+            toastEl.remove();
+            html.remove();
+        };
+    }
+
+    // =========================================================================
+    // РЕГИСТРАЦИЯ ПЛАГИНА И КНОПКИ В МЕНЮ LAMPA
+    // =========================================================================
+
+    function addMenuButton() {
+        var menuList = $('.menu .menu__list').eq(0);
+        if (!menuList.length || menuList.find('.ck-menu-item').length) return;
+
+        var icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h20L20 7l-5 4-3-6-3 6-5-4-2 11z"/></svg>';
+
+        var item = $(
+            '<li class="menu__item selector ck-menu-item">' +
+                '<div class="menu__ico">' + icon + '</div>' +
+                '<div class="menu__text">Cinema King</div>' +
+            '</li>'
+        );
+
+        item.on('hover:enter', function () {
+            Lampa.Activity.push({
+                url: '',
+                title: 'Cinema King',
+                component: PLUGIN_ID,
+                page: 1
+            });
+        });
+
+        menuList.append(item);
+    }
+
+    function initPlugin() {
+        Lampa.Component.add(PLUGIN_ID, CinemaKingComponent);
+        addMenuButton();
+    }
+
+    if (window.appready) {
+        initPlugin();
+    } else {
+        Lampa.Listener.follow('app', function (e) {
+            if (e.type === 'ready') initPlugin();
+        });
+    }
 })();
