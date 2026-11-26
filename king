@@ -1,13 +1,13 @@
 (function () {
     'use strict';
 
-    // Защита от повторной инициализации
+    // Защита от повторной инициализации плагина
     if (window.cinema_king_plugin) return;
     window.cinema_king_plugin = true;
 
     var PLUGIN_ID = 'cinema_king';
     var STORAGE_KEY = 'cinema_king_state_v2';
-    var STYLE_ID = 'cinema-king-styles-responsive-v11';
+    var STYLE_ID = 'cinema-king-styles-responsive-v12';
 
     // Постоянные HTTPS-ссылки на два оригинальных прикреплённых изображения QR-кодов в репозитории GitHub
     // Не генерируем, не перерисовываем и не изменяем содержимое QR-кодов
@@ -2947,4 +2947,1407 @@
             });
 
             var addWinnerBtn = $('<div class="ck-btn ck-btn--secondary selector">Добавить в победители</div>');
-            addWinnerBtn.on
+            addWinnerBtn.on('hover:enter', function () {
+                TasteEngine.addDirectWinner(state, card);
+                addWinnerBtn.text('✓ В списке победителей');
+                showToast('«' + card.title + '» добавлен в «Мои победители».');
+            });
+
+            actions.append(openBtn).append(spinAgainBtn).append(addWinnerBtn);
+
+            if (state.roulette.streamMode) {
+                var exitStreamBtn = $('<div class="ck-btn ck-btn--secondary selector">Выйти из режима стрима</div>');
+                exitStreamBtn.on('hover:enter', function () {
+                    state.roulette.streamMode = false;
+                    StorageManager.save(state);
+                    renderRouletteResultModal(card);
+                });
+                actions.append(exitStreamBtn);
+            }
+
+            modal.append(banner).append(bodyHtml);
+            view.append(modal);
+            body.empty().append(view);
+            refreshFocus(spinAgainBtn);
+        }
+
+        // ---------------------------------------------------------------------
+        // 5. ВИКТОРИНА «УГАДАЙ КАДР»
+        // ---------------------------------------------------------------------
+
+        function renderQuiz() {
+            if (isQuizLoading) return;
+
+            if (quizRound > quizMaxRounds) {
+                renderQuizComplete();
+                return;
+            }
+
+            var isTvMode = quizMode === 'tv_stills';
+            var pool = isTvMode ? quizPoolTv : quizPoolMovie;
+
+            if (pool.length < 8) {
+                isQuizLoading = true;
+                body.html('<div class="ck-state-box"><div class="ck-spinner"></div><div>' + (isTvMode ? 'Загружаем сериалы и кадры из серий (TMDB Episode Stills)...' : 'Загружаем фильмы и фоновые арты (TMDB Backdrops)...') + '</div></div>');
+
+                CatalogService.fetchDiscover(network, {
+                    mediaType: isTvMode ? 'tv' : 'movie',
+                    page: 1 + Math.floor(Math.random() * 6),
+                    minRating: 7.0,
+                    sortBy: 'popularity.desc',
+                    minVotes: 400
+                }, function (items) {
+                    isQuizLoading = false;
+                    mergeUnique(pool, items);
+                    if (pool.length >= 4) {
+                        if (activeTab === 'quiz') prepareQuizQuestion();
+                    } else {
+                        renderErrorState('Недостаточно данных в каталоге TMDB для запуска викторины.', function () {
+                            renderQuiz();
+                        });
+                    }
+                }, function () {
+                    isQuizLoading = false;
+                    renderErrorState('Ошибка сети при загрузке вопросов викторины.', function () {
+                        renderQuiz();
+                    });
+                });
+                return;
+            }
+
+            prepareQuizQuestion();
+        }
+
+        function prepareQuizQuestion() {
+            var isTvMode = quizMode === 'tv_stills';
+            var pool = isTvMode ? quizPoolTv : quizPoolMovie;
+
+            var candidates = [];
+            var i;
+            for (i = 0; i < pool.length; i++) {
+                if (!quizUsedIds[cardKey(pool[i])]) {
+                    candidates.push(pool[i]);
+                }
+            }
+            if (candidates.length < 4) {
+                quizUsedIds = {};
+                candidates = pool.slice();
+            }
+
+            var shuffled = shuffleArray(candidates);
+            var target = shuffled[0];
+            var distractors = shuffled.slice(1, 4);
+
+            if (!target || distractors.length < 3) {
+                renderErrorState('Недостаточно вариантов ответа для формирования вопроса.', function () {
+                    quizPoolTv = [];
+                    quizPoolMovie = [];
+                    renderQuiz();
+                });
+                return;
+            }
+
+            isQuizLoading = true;
+            body.html('<div class="ck-state-box"><div class="ck-spinner"></div><div>Проверяем наличие изображений в TMDB...</div></div>');
+
+            function onImagesLoaded(imagesList) {
+                isQuizLoading = false;
+                if (activeTab !== 'quiz') return;
+
+                if (!imagesList || !imagesList.length) {
+                    quizUsedIds[cardKey(target)] = true;
+                    for (var idx = pool.length - 1; idx >= 0; idx--) {
+                        if (cardKey(pool[idx]) === cardKey(target)) {
+                            pool.splice(idx, 1);
+                            break;
+                        }
+                    }
+                    if (pool.length >= 4) {
+                        prepareQuizQuestion();
+                    } else {
+                        renderQuiz();
+                    }
+                    return;
+                }
+
+                quizUsedIds[cardKey(target)] = true;
+                var pickedImage = imagesList[Math.floor(Math.random() * imagesList.length)];
+                var options = shuffleArray([target].concat(distractors));
+                drawQuizQuestion(target, pickedImage, options);
+            }
+
+            if (isTvMode) {
+                CatalogService.fetchTvEpisodeStills(network, target, onImagesLoaded);
+            } else {
+                CatalogService.fetchMovieCleanBackdrops(network, target, onImagesLoaded);
+            }
+        }
+
+        function drawQuizQuestion(target, imageObj, options) {
+            var isTvMode = quizMode === 'tv_stills';
+            var view = $('<div class="ck-view ck-quiz-wrap"></div>');
+
+            var toolbar = $('<div class="ck-quiz-toolbar"></div>');
+            var badgeHtml = isTvMode
+                ? '<span class="ck-quiz-badge">TMDB: Episode Still</span>'
+                : '<span class="ck-quiz-badge ck-quiz-badge--backdrop">TMDB: Backdrop (промо-фон)</span>';
+
+            toolbar.append(
+                '<div class="ck-quiz-head-left">' +
+                    '<div class="ck-arena-title" style="font-size:1.15em;">Вопрос ' + quizRound + ' из ' + quizMaxRounds + ' • Счёт: ' + quizScore + '</div>' +
+                    '<div class="ck-arena-meta">Рекорд: ' + state.quiz.bestScore + '</div>' +
+                    badgeHtml +
+                '</div>'
+            );
+
+            var modeChips = $('<div class="ck-chips"></div>');
+            var tvChip = $('<div class="ck-chip selector' + (isTvMode ? ' is-selected' : '') + '">Сериалы (Stills)</div>');
+            tvChip.on('hover:enter', function () {
+                if (quizMode === 'tv_stills') return;
+                quizMode = 'tv_stills';
+                quizRound = 1;
+                quizScore = 0;
+                quizUsedIds = {};
+                renderQuiz();
+            });
+
+            var movieChip = $('<div class="ck-chip selector' + (!isTvMode ? ' is-selected' : '') + '">Фильмы (Backdrops)</div>');
+            movieChip.on('hover:enter', function () {
+                if (quizMode === 'movie_backdrops') return;
+                quizMode = 'movie_backdrops';
+                quizRound = 1;
+                quizScore = 0;
+                quizUsedIds = {};
+                renderQuiz();
+            });
+
+            modeChips.append(tvChip).append(movieChip);
+            toolbar.append(modeChips);
+            view.append(toolbar);
+
+            var frameBox = $(
+                '<div class="ck-quiz-frame-box">' +
+                    '<img src="' + esc(imageObj.url) + '" alt="Изображение из TMDB">' +
+                    '<div class="ck-quiz-frame-meta">' + esc(imageObj.meta) + '</div>' +
+                '</div>'
+            );
+
+            frameBox.find('img').on('error', function () {
+                if (activeTab === 'quiz') prepareQuizQuestion();
+            });
+
+            view.append(frameBox);
+
+            var optsGrid = $('<div class="ck-quiz-options"></div>');
+            var answered = false;
+
+            for (var i = 0; i < options.length; i++) {
+                (function (optCard) {
+                    var label = optCard.title + (optCard.year ? ' (' + optCard.year + ')' : '');
+                    var btn = $('<div class="ck-quiz-opt selector" title="' + esc(label) + '"><span>' + esc(label) + '</span></div>');
+                    btn.on('hover:enter', function () {
+                        if (answered) return;
+                        answered = true;
+
+                        var isRight = cardKey(optCard) === cardKey(target);
+                        if (isRight) {
+                            quizScore += 1;
+                            btn.addClass('is-correct');
+                            showToast('Верно! Это «' + target.title + '».');
+                        } else {
+                            btn.addClass('is-wrong');
+                            optsGrid.find('.ck-quiz-opt').each(function (idx) {
+                                if (cardKey(options[idx]) === cardKey(target)) {
+                                    $(this).addClass('is-correct');
+                                }
+                            });
+                            showToast('Неверно. Правильный ответ: «' + target.title + '».');
+                        }
+
+                        if (quizScore > state.quiz.bestScore) {
+                            state.quiz.bestScore = quizScore;
+                        }
+                        StorageManager.save(state);
+
+                        var nextDelay = isReducedMotion(state) ? 400 : 1350;
+                        setTimeout(function () {
+                            quizRound += 1;
+                            if (activeTab === 'quiz') renderQuiz();
+                        }, nextDelay);
+                    });
+                    optsGrid.append(btn);
+                })(options[i]);
+            }
+
+            view.append(optsGrid);
+            body.empty().append(view);
+            refreshFocus(optsGrid.find('.selector').first());
+        }
+
+        function renderQuizComplete() {
+            state.quiz.gamesPlayed += 1;
+            if (quizScore > state.quiz.bestScore) {
+                state.quiz.bestScore = quizScore;
+            }
+            StorageManager.save(state);
+
+            var view = $('<div class="ck-view"></div>');
+            var box = $(
+                '<div class="ck-state-box">' +
+                    '<div class="ck-hero-kicker">Викторина завершена</div>' +
+                    '<h2 style="font-size:1.9em;margin:0 0 0.45em;">Твой результат: ' + quizScore + ' из ' + quizMaxRounds + '</h2>' +
+                    '<p style="color:#93c5fd;margin:0 auto 1.5em;">Личный рекорд: ' + state.quiz.bestScore + ' из ' + quizMaxRounds + '</p>' +
+                    '<div class="ck-actions" style="justify-content:center;"></div>' +
+                '</div>'
+            );
+
+            var replayBtn = $('<div class="ck-btn ck-btn--primary selector">Сыграть ещё раз</div>');
+            replayBtn.on('hover:enter', function () {
+                quizRound = 1;
+                quizScore = 0;
+                quizUsedIds = {};
+                renderQuiz();
+            });
+
+            var homeBtn = $('<div class="ck-btn ck-btn--secondary selector">На главную</div>');
+            homeBtn.on('hover:enter', function () {
+                switchTab('home');
+            });
+
+            box.find('.ck-actions').append(replayBtn).append(homeBtn);
+            view.append(box);
+            body.empty().append(view);
+            refreshFocus(replayBtn);
+        }
+
+        // ---------------------------------------------------------------------
+        // 6. РЕЖИМ «ПОДОБРАТЬ ПОД МОЙ ВКУС»
+        // ---------------------------------------------------------------------
+
+        function renderWizard() {
+            if (wizardStep === 1) renderWizardGenres();
+            else if (wizardStep === 2) renderWizardParams();
+            else renderWizardResults();
+        }
+
+        function renderWizardGenres() {
+            var view = $('<div class="ck-view"></div>');
+            view.append(
+                '<div class="ck-wizard-steps">' +
+                    '<div class="ck-step-pill is-active">Шаг 1. Выбор жанров</div>' +
+                    '<div class="ck-step-pill">Шаг 2. Параметры</div>' +
+                    '<div class="ck-step-pill">Шаг 3. Подборка из 13 фильмов</div>' +
+                '</div>' +
+                '<div class="ck-arena-head">' +
+                    '<div class="ck-arena-title">Выбери интересующие жанры</div>' +
+                    '<div class="ck-arena-meta">Выбрано: ' + state.wizard.genres.length + '</div>' +
+                '</div>'
+            );
+
+            var grid = $('<div class="ck-genre-grid"></div>');
+            for (var i = 0; i < TASTE_WIZARD_GENRES.length; i++) {
+                (function (g) {
+                    var isSel = state.wizard.genres.indexOf(g.id) !== -1;
+                    var bgUrl = CatalogService.getImageUrl(g.backdrop, 'w780');
+                    var tile = $(
+                        '<div class="ck-genre-tile selector' + (isSel ? ' is-selected' : '') + '">' +
+                            '<div class="ck-genre-tile-bg" style="background-image:url(\'' + esc(bgUrl) + '\');"></div>' +
+                            '<div class="ck-genre-tile-grad"></div>' +
+                            '<div class="ck-genre-tile-label">' +
+                                '<span>' + esc(g.name) + '</span>' +
+                                '<span class="ck-genre-tile-check">✓</span>' +
+                            '</div>' +
+                        '</div>'
+                    );
+
+                    tile.on('hover:focus', function () {
+                        if (bgUrl) {
+                            backdropMgr.stopSlideshow();
+                            backdropMgr.setBackdrop(bgUrl, g.name);
+                        }
+                    });
+
+                    tile.on('hover:enter', function () {
+                        var idx = state.wizard.genres.indexOf(g.id);
+                        if (idx === -1) state.wizard.genres.push(g.id);
+                        else state.wizard.genres.splice(idx, 1);
+                        StorageManager.save(state);
+                        renderWizardGenres();
+                    });
+
+                    grid.append(tile);
+                })(TASTE_WIZARD_GENRES[i]);
+            }
+
+            var actions = $('<div class="ck-actions"></div>');
+            var nextBtn = $('<div class="ck-btn ck-btn--primary selector">Далее: настроить параметры →</div>');
+            nextBtn.on('hover:enter', function () {
+                if (!state.wizard.genres.length) {
+                    showToast('Выбери хотя бы один жанр для подбора.');
+                    return;
+                }
+                wizardStep = 2;
+                renderWizard();
+            });
+
+            var clearBtn = $('<div class="ck-btn ck-btn--secondary selector">Очистить выбор</div>');
+            clearBtn.on('hover:enter', function () {
+                state.wizard.genres = [];
+                StorageManager.save(state);
+                renderWizardGenres();
+            });
+
+            actions.append(nextBtn).append(clearBtn);
+            view.append(grid).append(actions);
+            body.empty().append(view);
+            refreshFocus(grid.find('.selector').first());
+        }
+
+        function renderWizardParams() {
+            var w = state.wizard;
+            var view = $('<div class="ck-view"></div>');
+            view.append(
+                '<div class="ck-wizard-steps">' +
+                    '<div class="ck-step-pill">Шаг 1. Выбор жанров</div>' +
+                    '<div class="ck-step-pill is-active">Шаг 2. Параметры</div>' +
+                    '<div class="ck-step-pill">Шаг 3. Подборка из 13 фильмов</div>' +
+                '</div>'
+            );
+
+            var panel = $('<div class="ck-panel"><div class="ck-panel-title">Уточни предпочтения</div></div>');
+
+            var gType = $('<div class="ck-setting-group"><div class="ck-setting-label">Что подбираем</div><div class="ck-chips"></div></div>');
+            for (var i = 0; i < CONTENT_OPTIONS.length; i++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (w.contentType === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        w.contentType = opt.id;
+                        StorageManager.save(state);
+                        renderWizardParams();
+                    });
+                    gType.find('.ck-chips').append(chip);
+                })(CONTENT_OPTIONS[i]);
+            }
+            panel.append(gType);
+
+            var gPer = $('<div class="ck-setting-group"><div class="ck-setting-label">Эпоха и годы выпуска</div><div class="ck-chips"></div></div>');
+            for (var p = 0; p < PERIOD_OPTIONS.length; p++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (w.period === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        w.period = opt.id;
+                        StorageManager.save(state);
+                        renderWizardParams();
+                    });
+                    gPer.find('.ck-chips').append(chip);
+                })(PERIOD_OPTIONS[p]);
+            }
+            panel.append(gPer);
+
+            var gRat = $('<div class="ck-setting-group"><div class="ck-setting-label">Минимальный рейтинг</div><div class="ck-chips"></div></div>');
+            for (var r = 0; r < RATING_OPTIONS.length; r++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (w.minRating === opt.value ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        w.minRating = opt.value;
+                        StorageManager.save(state);
+                        renderWizardParams();
+                    });
+                    gRat.find('.ck-chips').append(chip);
+                })(RATING_OPTIONS[r]);
+            }
+            panel.append(gRat);
+
+            var sortOpts = [
+                { id: 'popular', label: 'Популярные хиты' },
+                { id: 'acclaimed', label: 'Максимальная оценка зрителей' }
+            ];
+            var gSort = $('<div class="ck-setting-group"><div class="ck-setting-label">Характер подборки</div><div class="ck-chips"></div></div>');
+            for (var s = 0; s < sortOpts.length; s++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (w.sortStyle === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        w.sortStyle = opt.id;
+                        StorageManager.save(state);
+                        renderWizardParams();
+                    });
+                    gSort.find('.ck-chips').append(chip);
+                })(sortOpts[s]);
+            }
+            panel.append(gSort);
+
+            var actions = $('<div class="ck-actions"></div>');
+            var backBtn = $('<div class="ck-btn ck-btn--secondary selector">← Назад к жанрам</div>');
+            backBtn.on('hover:enter', function () {
+                wizardStep = 1;
+                renderWizard();
+            });
+
+            var buildBtn = $('<div class="ck-btn ck-btn--primary selector">Подобрать 13 фильмов</div>');
+            buildBtn.on('hover:enter', function () {
+                TasteEngine.applyWizardPreferences(state, w);
+                wizardSeenIds = {};
+                wizardPage = 1;
+                wizardResults = [];
+                wizardStep = 3;
+                generateThirteenPicks();
+            });
+
+            actions.append(backBtn).append(buildBtn);
+            view.append(panel).append(actions);
+            body.empty().append(view);
+            refreshFocus(buildBtn);
+        }
+
+        function generateThirteenPicks() {
+            if (isWizardLoading) return;
+            isWizardLoading = true;
+
+            body.html('<div class="ck-state-box"><div class="ck-spinner"></div><div>Формируем персональную подборку из 13 фильмов...</div></div>');
+
+            var w = state.wizard;
+            var collected = [];
+            var attempts = 0;
+            var maxAttempts = 4;
+
+            function collectStep() {
+                attempts += 1;
+                var mType = w.contentType === 'all' ? (attempts % 2 === 0 ? 'tv' : 'movie') : w.contentType;
+                var withGenres = mapGenresForMediaType(w.genres, mType);
+                var sortBy = w.sortStyle === 'acclaimed' ? 'vote_average.desc' : 'popularity.desc';
+
+                CatalogService.fetchDiscover(network, {
+                    mediaType: mType,
+                    page: wizardPage,
+                    minRating: attempts <= 2 ? w.minRating : Math.max(0, w.minRating - 1.5),
+                    period: attempts <= 3 ? w.period : 'all',
+                    withGenres: withGenres,
+                    sortBy: sortBy,
+                    minVotes: w.sortStyle === 'acclaimed' ? 250 : 90
+                }, function (items) {
+                    wizardPage += 1;
+                    var i;
+                    for (i = 0; i < items.length; i++) {
+                        var k = cardKey(items[i]);
+                        if (!wizardSeenIds[k]) {
+                            wizardSeenIds[k] = true;
+                            collected.push(items[i]);
+                            if (collected.length >= 13) break;
+                        }
+                    }
+
+                    if (collected.length < 13 && items.length === 0 && Object.keys(wizardSeenIds).length > 13) {
+                        wizardSeenIds = {};
+                        wizardPage = 1;
+                    }
+
+                    if (collected.length >= 13 || attempts >= maxAttempts) {
+                        isWizardLoading = false;
+                        wizardResults = collected.slice(0, 13);
+                        if (activeTab === 'wizard') renderWizardResults();
+                    } else {
+                        collectStep();
+                    }
+                }, function () {
+                    isWizardLoading = false;
+                    renderErrorState('Не удалось сформировать подборку из каталога TMDB.', function () {
+                        generateThirteenPicks();
+                    });
+                });
+            }
+
+            collectStep();
+        }
+
+        function renderWizardResults() {
+            if (!wizardResults.length) {
+                generateThirteenPicks();
+                return;
+            }
+
+            updateCardBackdrop(wizardResults[0]);
+
+            var view = $('<div class="ck-view"></div>');
+            var toolbar = $(
+                '<div class="ck-toolbar">' +
+                    '<div class="ck-arena-title">Твоя подборка (' + wizardResults.length + ' фильмов)</div>' +
+                    '<div class="ck-actions"></div>' +
+                '</div>'
+            );
+
+            var refreshBtn = $('<div class="ck-btn ck-btn--primary ck-btn--sm selector">Обновить подборку</div>');
+            refreshBtn.on('hover:enter', function () {
+                generateThirteenPicks();
+            });
+
+            var editBtn = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector">Изменить параметры</div>');
+            editBtn.on('hover:enter', function () {
+                wizardStep = 1;
+                renderWizard();
+            });
+
+            toolbar.find('.ck-actions').append(refreshBtn).append(editBtn);
+            view.append(toolbar);
+
+            var grid = $('<div class="ck-grid"></div>');
+            for (var i = 0; i < wizardResults.length; i++) {
+                (function (c, idx) {
+                    var thumb = c.poster
+                        ? '<img src="' + esc(c.poster) + '" alt="' + esc(c.title) + '">'
+                        : '<div class="ck-poster-fallback" style="font-size:1.35em;">' + esc(getInitials(c.title)) + '</div>';
+
+                    var gNames = [];
+                    for (var g = 0; g < Math.min(3, (c.genres || []).length); g++) {
+                        var nm = getGenreName(c.genres[g]);
+                        if (nm) gNames.push(nm);
+                    }
+
+                    var reason = TasteEngine.explainRecommendation(state, c, state.wizard.genres, state.wizard.minRating);
+                    var delayStyle = isReducedMotion(state) ? '' : 'animation-delay:' + (idx * 35) + 'ms;';
+
+                    var cardEl = $(
+                        '<div class="ck-item-card" style="' + delayStyle + '">' +
+                            '<div class="ck-item-top selector">' +
+                                '<div class="ck-item-thumb">' + thumb + '</div>' +
+                                '<div class="ck-item-body">' +
+                                    '<div class="ck-item-title">' + (idx + 1) + '. ' + esc(c.title) + '</div>' +
+                                    '<div class="ck-meta-row" style="margin-bottom:0.3em;">' +
+                                        '<span class="ck-rating-pill">' + (c.rating ? '★ ' + c.rating : '—') + '</span>' +
+                                        '<span>' + esc(c.year || '') + '</span>' +
+                                    '</div>' +
+                                    '<div style="font-size:0.78em;color:#cbd5e1;">' + esc(gNames.join(' • ')) + '</div>' +
+                                    '<div class="ck-item-desc">' + esc(c.overview || 'Описание отсутствует.') + '</div>' +
+                                    '<div class="ck-item-reason">' + esc(reason) + '</div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>'
+                    );
+
+                    cardEl.find('img').on('error', function () {
+                        $(this).replaceWith('<div class="ck-poster-fallback" style="font-size:1.35em;">' + esc(getInitials(c.title)) + '</div>');
+                    });
+                    cardEl.find('.ck-item-top').on('hover:focus', function () {
+                        updateCardBackdrop(c);
+                    });
+                    cardEl.find('.ck-item-top').on('hover:enter', function () {
+                        openLampaCard(c);
+                    });
+
+                    grid.append(cardEl);
+                })(wizardResults[i], i);
+            }
+
+            view.append(grid);
+            body.empty().append(view);
+            refreshFocus(grid.find('.selector').first());
+        }
+
+        // ---------------------------------------------------------------------
+        // 7. РАЗДЕЛ «РЕКОМЕНДАЦИИ»
+        // ---------------------------------------------------------------------
+
+        function renderRecs(forceReload) {
+            if (!forceReload && recsList.length) {
+                drawRecsList();
+                return;
+            }
+            if (isRecsLoading) return;
+            isRecsLoading = true;
+
+            body.html('<div class="ck-state-box"><div class="ck-spinner"></div><div>Формируем персональные рекомендации на основе твоего профиля...</div></div>');
+
+            var topGenres = TasteEngine.getTopGenres(state, 2);
+            var withGenres = topGenres.length ? topGenres.map(function (g) { return g.id; }).join('|') : '';
+            var preferredType = state.settings.contentType;
+            if (preferredType === 'all') {
+                preferredType = state.typeScores.tv > state.typeScores.movie ? 'tv' : 'movie';
+            }
+
+            CatalogService.fetchDiscover(network, {
+                mediaType: preferredType,
+                page: recsPage,
+                minRating: Math.max(6.2, state.settings.minRating || 0),
+                period: state.settings.period,
+                excludedGenres: state.settings.excludedGenres,
+                withGenres: withGenres,
+                sortBy: 'popularity.desc',
+                minVotes: 150
+            }, function (items) {
+                isRecsLoading = false;
+
+                var wonMap = {};
+                var i;
+                for (i = 0; i < state.winners.length; i++) {
+                    wonMap[cardKey(state.winners[i])] = true;
+                }
+
+                var filtered = [];
+                for (i = 0; i < items.length; i++) {
+                    if (!wonMap[cardKey(items[i])]) {
+                        filtered.push({
+                            card: items[i],
+                            match: TasteEngine.scoreCard(state, items[i]),
+                            reason: TasteEngine.explainRecommendation(state, items[i], null, null)
+                        });
+                    }
+                }
+
+                filtered.sort(function (a, b) {
+                    return b.match - a.match;
+                });
+
+                recsList = filtered.slice(0, 12);
+                if (activeTab === 'recs') {
+                    if (recsList.length) drawRecsList();
+                    else {
+                        renderErrorState('По текущим фильтрам рекомендаций не найдено.', function () {
+                            recsPage = 1;
+                            renderRecs(true);
+                        });
+                    }
+                }
+            }, function () {
+                isRecsLoading = false;
+                renderErrorState('Ошибка загрузки рекомендаций из TMDB.', function () {
+                    renderRecs(true);
+                });
+            });
+        }
+
+        function drawRecsList() {
+            updateCardBackdrop(recsList[0].card);
+            var view = $('<div class="ck-view"></div>');
+
+            var toolbar = $('<div class="ck-toolbar"><div class="ck-arena-title">Персональные рекомендации</div></div>');
+            var refreshBtn = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector">Обновить список</div>');
+            refreshBtn.on('hover:enter', function () {
+                recsPage = recsPage >= 5 ? 1 : recsPage + 1;
+                recsList = [];
+                renderRecs(true);
+            });
+            toolbar.append(refreshBtn);
+            view.append(toolbar);
+
+            var grid = $('<div class="ck-grid"></div>');
+            for (var i = 0; i < recsList.length; i++) {
+                (function (entry) {
+                    var c = entry.card;
+                    var thumb = c.poster
+                        ? '<img src="' + esc(c.poster) + '" alt="' + esc(c.title) + '">'
+                        : '<div class="ck-poster-fallback" style="font-size:1.35em;">' + esc(getInitials(c.title)) + '</div>';
+
+                    var gNames = [];
+                    for (var g = 0; g < Math.min(3, (c.genres || []).length); g++) {
+                        var nm = getGenreName(c.genres[g]);
+                        if (nm) gNames.push(nm);
+                    }
+
+                    var cardEl = $(
+                        '<div class="ck-item-card">' +
+                            '<div class="ck-item-top selector">' +
+                                '<div class="ck-item-thumb">' + thumb + '</div>' +
+                                '<div class="ck-item-body">' +
+                                    '<div class="ck-item-title">' + esc(c.title) + '</div>' +
+                                    '<div class="ck-meta-row" style="margin-bottom:0.3em;">' +
+                                        '<span class="ck-rating-pill">' + (c.rating ? '★ ' + c.rating : '—') + '</span>' +
+                                        '<span>' + esc(c.year || '') + '</span>' +
+                                        '<span style="color:#60a5fa;font-weight:700;">' + entry.match + '%</span>' +
+                                    '</div>' +
+                                    '<div style="font-size:0.78em;color:#cbd5e1;">' + esc(gNames.join(' • ')) + '</div>' +
+                                    '<div class="ck-item-desc">' + esc(c.overview || 'Описание отсутствует.') + '</div>' +
+                                    '<div class="ck-item-reason">' + esc(entry.reason) + '</div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>'
+                    );
+
+                    cardEl.find('img').on('error', function () {
+                        $(this).replaceWith('<div class="ck-poster-fallback" style="font-size:1.35em;">' + esc(getInitials(c.title)) + '</div>');
+                    });
+                    cardEl.find('.ck-item-top').on('hover:focus', function () {
+                        updateCardBackdrop(c);
+                    });
+                    cardEl.find('.ck-item-top').on('hover:enter', function () {
+                        openLampaCard(c);
+                    });
+                    grid.append(cardEl);
+                })(recsList[i]);
+            }
+
+            view.append(grid);
+            body.empty().append(view);
+            refreshFocus(grid.find('.selector').first());
+        }
+
+        // ---------------------------------------------------------------------
+        // 8. РАЗДЕЛ «МОИ ПОБЕДИТЕЛИ»
+        // ---------------------------------------------------------------------
+
+        function openWinnersSearch() {
+            promptEditField('Поиск среди победителей', winnersQuery, function (val) {
+                winnersQuery = val;
+                renderWinners();
+            });
+        }
+
+        function renderWinners() {
+            var view = $('<div class="ck-view"></div>');
+
+            if (!state.winners.length) {
+                var empty = $(
+                    '<div class="ck-state-box">' +
+                        '<h3 style="margin:0 0 0.5em;">Список победителей пока пуст</h3>' +
+                        '<p style="color:#94a3b8;margin:0 0 1.2em;">Выбирай фильмы в дуэлях или добавляй их из «Кино-рулетки».</p>' +
+                    '</div>'
+                );
+                var goBtn = $('<div class="ck-btn ck-btn--primary selector">Начать битву</div>');
+                goBtn.on('hover:enter', function () { switchTab('battle'); });
+                empty.append(goBtn);
+                view.append(empty);
+                body.empty().append(view);
+                refreshFocus(goBtn);
+                return;
+            }
+
+            var toolbar = $('<div class="ck-toolbar"><div class="ck-arena-title">Мои победители (' + state.winners.length + ')</div><div class="ck-chips"></div></div>');
+
+            var searchBtn = $('<div class="ck-search-box selector">Поиск: ' + esc(winnersQuery || 'все фильмы') + '</div>');
+            searchBtn.on('hover:enter', openWinnersSearch);
+            toolbar.find('.ck-chips').append(searchBtn);
+
+            if (winnersQuery) {
+                var resetSearchBtn = $('<div class="ck-chip selector">Сбросить поиск</div>');
+                resetSearchBtn.on('hover:enter', function () {
+                    winnersQuery = '';
+                    renderWinners();
+                });
+                toolbar.find('.ck-chips').append(resetSearchBtn);
+            }
+
+            var sorts = [
+                { id: 'date', label: 'По дате' },
+                { id: 'wins', label: 'По победам' },
+                { id: 'rating', label: 'По рейтингу' },
+                { id: 'title', label: 'По названию' }
+            ];
+
+            for (var s = 0; s < sorts.length; s++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (winnersSort === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        winnersSort = opt.id;
+                        renderWinners();
+                    });
+                    toolbar.find('.ck-chips').append(chip);
+                })(sorts[s]);
+            }
+
+            var list = state.winners.slice();
+            if (winnersQuery) {
+                var qLower = winnersQuery.toLowerCase();
+                list = list.filter(function (item) {
+                    return String(item.title || '').toLowerCase().indexOf(qLower) !== -1;
+                });
+            }
+
+            list.sort(function (a, b) {
+                if (winnersSort === 'wins') return (b.wins || 1) - (a.wins || 1);
+                if (winnersSort === 'rating') return (b.rating || 0) - (a.rating || 0);
+                if (winnersSort === 'title') return String(a.title).localeCompare(String(b.title));
+                return (b.lastWon || 0) - (a.lastWon || 0);
+            });
+
+            var grid = $('<div class="ck-grid"></div>');
+            if (!list.length) {
+                grid.append('<div class="ck-state-box">По запросу «' + esc(winnersQuery) + '» ничего не найдено.</div>');
+            } else {
+                updateCardBackdrop(list[0]);
+                for (var i = 0; i < list.length; i++) {
+                    (function (item) {
+                        var thumb = item.poster
+                            ? '<img src="' + esc(item.poster) + '" alt="' + esc(item.title) + '">'
+                            : '<div class="ck-poster-fallback" style="font-size:1.35em;">' + esc(getInitials(item.title)) + '</div>';
+
+                        var cardEl = $(
+                            '<div class="ck-item-card">' +
+                                '<div class="ck-item-top selector">' +
+                                    '<div class="ck-item-thumb">' + thumb + '</div>' +
+                                    '<div class="ck-item-body">' +
+                                        '<div class="ck-item-title">' + esc(item.title) + '</div>' +
+                                        '<div class="ck-meta-row" style="margin-bottom:0.35em;">' +
+                                            '<span class="ck-rating-pill">' + (item.rating ? '★ ' + item.rating : '—') + '</span>' +
+                                            '<span>' + esc(item.year || '') + '</span>' +
+                                        '</div>' +
+                                        '<div style="font-size:0.84em;color:#93c5fd;">Побед: ' + (item.wins || 1) + '</div>' +
+                                    '</div>' +
+                                '</div>' +
+                                '<div class="ck-item-actions">' +
+                                    '<div class="ck-item-act selector ck-act-open">Открыть</div>' +
+                                    '<div class="ck-item-act ck-item-act--del selector ck-act-del">Удалить</div>' +
+                                '</div>' +
+                            '</div>'
+                        );
+
+                        cardEl.find('img').on('error', function () {
+                            $(this).replaceWith('<div class="ck-poster-fallback" style="font-size:1.35em;">' + esc(getInitials(item.title)) + '</div>');
+                        });
+                        cardEl.find('.ck-item-top').on('hover:focus', function () {
+                            updateCardBackdrop(item);
+                        });
+                        cardEl.find('.ck-item-top, .ck-act-open').on('hover:enter', function () {
+                            openLampaCard(item);
+                        });
+                        cardEl.find('.ck-act-del').on('hover:enter', function () {
+                            state.winners = state.winners.filter(function (w) {
+                                return !(w.id === item.id && w.media_type === item.media_type);
+                            });
+                            StorageManager.save(state);
+                            showToast('Удалено из победителей.');
+                            renderWinners();
+                        });
+
+                        grid.append(cardEl);
+                    })(list[i]);
+                }
+            }
+
+            view.append(toolbar).append(grid);
+            body.empty().append(view);
+            refreshFocus(grid.find('.selector').first().length ? grid.find('.selector').first() : searchBtn);
+        }
+
+        // ---------------------------------------------------------------------
+        // 9. РАЗДЕЛ «МОЙ ВКУС»
+        // ---------------------------------------------------------------------
+
+        function renderTaste() {
+            var view = $('<div class="ck-view"></div>');
+            var topGenres = TasteEngine.getTopGenres(state, 8);
+            var avgRating = TasteEngine.getAveragePreferredRating(state);
+            var topDec = TasteEngine.getTopDecade(state);
+
+            var kpi = $(
+                '<div class="ck-kpi-grid" style="margin-bottom:1.25em;">' +
+                    '<div class="ck-kpi-card"><div class="ck-kpi-label">Количество сравнений</div><div class="ck-kpi-value">' + state.stats.comparisons + '</div></div>' +
+                    '<div class="ck-kpi-card"><div class="ck-kpi-label">Количество побед</div><div class="ck-kpi-value">' + state.winners.length + '</div></div>' +
+                    '<div class="ck-kpi-card"><div class="ck-kpi-label">Средний рейтинг выбора</div><div class="ck-kpi-value">' + (avgRating ? '★ ' + avgRating : '—') + '</div></div>' +
+                    '<div class="ck-kpi-card"><div class="ck-kpi-label">Ведущая эпоха</div><div class="ck-kpi-value" style="font-size:1.35em;">' + esc(topDec ? decadeLabel(topDec) : '—') + '</div></div>' +
+                '</div>'
+            );
+            view.append(kpi);
+
+            var genrePanel = $('<div class="ck-panel"><div class="ck-panel-title">Любимые жанры и категории</div></div>');
+            if (!topGenres.length) {
+                genrePanel.append('<div style="color:#94a3b8;">Пока недостаточно данных. Сыграй в битву или используй «Подобрать под мой вкус».</div>');
+            } else {
+                for (var i = 0; i < topGenres.length; i++) {
+                    var g = topGenres[i];
+                    genrePanel.append(
+                        '<div class="ck-bar-row">' +
+                            '<div class="ck-bar-head"><span>' + esc(g.name) + '</span><span style="color:#93c5fd;font-weight:700;">' + g.percent + '%</span></div>' +
+                            '<div class="ck-bar-track"><div class="ck-bar-fill" style="width:' + g.percent + '%;"></div></div>' +
+                        '</div>'
+                    );
+                }
+            }
+            view.append(genrePanel);
+
+            if (state.tasteTimeline && state.tasteTimeline.length) {
+                var timePanel = $('<div class="ck-panel"><div class="ck-panel-title">Изменение предпочтений со временем</div></div>');
+                for (var t = 0; t < state.tasteTimeline.length; t++) {
+                    var snap = state.tasteTimeline[t];
+                    timePanel.append(
+                        '<div class="ck-history-row">' +
+                            '<span style="color:#94a3b8;">После ' + snap.step + ' сравнений</span>' +
+                            '<span class="ck-history-win">' + esc(snap.genres) + '</span>' +
+                        '</div>'
+                    );
+                }
+                view.append(timePanel);
+            }
+
+            var histPanel = $('<div class="ck-panel"><div class="ck-panel-title">История выбора</div></div>');
+            if (!state.history.length) {
+                histPanel.append('<div style="color:#94a3b8;">История сравнений пока пуста.</div>');
+            } else {
+                var maxH = Math.min(12, state.history.length);
+                for (var h = 0; h < maxH; h++) {
+                    var row = state.history[h];
+                    histPanel.append(
+                        '<div class="ck-history-row">' +
+                            '<span class="ck-history-win">✓ ' + esc(row.winnerTitle) + '</span>' +
+                            '<span class="ck-history-lose">против «' + esc(row.loserTitle) + '»</span>' +
+                        '</div>'
+                    );
+                }
+            }
+            view.append(histPanel);
+
+            body.empty().append(view);
+            refreshFocus(topbar.find('.is-active'));
+        }
+
+        // ---------------------------------------------------------------------
+        // 10. ОТДЕЛЬНАЯ СТРАНИЦА «ПОДДЕРЖАТЬ АВТОРА» (В ГЛАВНОЙ НАВИГАЦИИ)
+        // ---------------------------------------------------------------------
+
+        function renderSupport() {
+            var sup = state.support;
+            var view = $('<div class="ck-view"></div>');
+            var page = $('<div class="ck-donate-page"></div>');
+
+            // 1. Заголовок и описание
+            page.append(
+                '<div class="ck-donate-hero">' +
+                    '<h1 class="ck-donate-title">Поддержать автора</h1>' +
+                    '<p class="ck-donate-desc">Cinema King развивается благодаря автору и поддержке пользователей. Если тебе нравится проект, ты можешь поддержать его развитие или заказать Lampa под ключ.</p>' +
+                '</div>'
+            );
+
+            // 2. Моя карта Monobank + кнопки копирования и перехода по ссылке Monobank
+            var cardBox = $(
+                '<div class="ck-card-box">' +
+                    '<div>' +
+                        '<div class="ck-card-box-label">Моя карта Monobank</div>' +
+                        '<div class="ck-card-box-number">' + esc(formatCardNumber(sup.cardNumber)) + '</div>' +
+                    '</div>' +
+                    '<div class="ck-card-box-actions"></div>' +
+                '</div>'
+            );
+
+            var copyBtn = $('<div class="ck-btn ck-btn--primary selector">Скопировать номер карты</div>');
+            copyBtn.on('hover:enter', function () {
+                copyTextToClipboard(sup.cardNumber, function () {
+                    showToast('Номер карты скопирован: ' + formatCardNumber(sup.cardNumber));
+                });
+            });
+
+            var monoBtn = $('<div class="ck-btn ck-btn--secondary selector">Перейти в Monobank</div>');
+            monoBtn.on('hover:enter', function () {
+                openExternalUrl(sup.monobankUrl, showToast);
+            });
+
+            cardBox.find('.ck-card-box-actions').append(copyBtn).append(monoBtn);
+            page.append(cardBox);
+
+            // 3. Два оригинальных прикреплённых QR-кода рядом друг с другом (вертикально на смартфонах)
+            var qrPair = $('<div class="ck-qr-pair-grid"></div>');
+            var qrUrls = [sup.qrCode1Url, sup.qrCode2Url];
+
+            for (var q = 0; q < qrUrls.length; q++) {
+                (function (imgUrl, idx) {
+                    var slot = $('<div class="ck-qr-slot"></div>');
+                    var img = $('<img src="' + esc(imgUrl) + '" alt="QR-код ' + (idx + 1) + '">');
+                    img.on('error', function () {
+                        $(this).replaceWith('<div class="ck-qr-missing">Не удалось загрузить QR-код.<br>Проверьте HTTPS-ссылку на изображение в настройках.</div>');
+                    });
+                    slot.append(img);
+                    qrPair.append(slot);
+                })(qrUrls[q], q);
+            }
+            page.append(qrPair);
+
+            // 4. Блок «Хочешь Lampa под ключ?»
+            var turnkeyBox = $(
+                '<div class="ck-turnkey-box">' +
+                    '<div>' +
+                        '<h2 class="ck-turnkey-title">Хочешь Lampa под ключ?</h2>' +
+                        '<p class="ck-turnkey-desc">Можно заказать полностью настроенную Lampa, приобрести готовый аккаунт или получить помощь с установкой и настройкой.</p>' +
+                    '</div>' +
+                '</div>'
+            );
+
+            var turnkeyBtn = $('<div class="ck-btn ck-btn--primary selector">Заказать Lampa под ключ</div>');
+            turnkeyBtn.on('hover:enter', function () {
+                if (sup.serviceLampaUrl && String(sup.serviceLampaUrl).trim()) {
+                    openExternalUrl(sup.serviceLampaUrl, showToast);
+                } else {
+                    showToast('Укажите ссылку на заказ Lampa под ключ в разделе «Настройки».');
+                }
+            });
+            turnkeyBox.append(turnkeyBtn);
+            page.append(turnkeyBox);
+
+            view.append(page);
+            body.empty().append(view);
+            refreshFocus(copyBtn);
+        }
+
+        // ---------------------------------------------------------------------
+        // 11. РАЗДЕЛ «НАСТРОЙКИ»
+        // ---------------------------------------------------------------------
+
+        function renderSettings() {
+            var view = $('<div class="ck-view"></div>');
+            var sup = state.support;
+
+            // --- ПАРАМЕТРЫ ИГРЫ И КАТАЛОГА ---
+            var panel = $('<div class="ck-panel"><div class="ck-panel-title">Параметры игры и каталога</div></div>');
+
+            function invalidatePools() {
+                battlePool = [];
+                battlePage = 1;
+                currentPair = null;
+                kothPool = [];
+                kothPage = 1;
+                currentChallenger = null;
+                recsList = [];
+                recsPage = 1;
+                StorageManager.save(state);
+            }
+
+            var rndGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Количество раундов в сессии «Битвы фильмов»</div><div class="ck-chips"></div></div>');
+            for (var rIdx = 0; rIdx < ROUNDS_OPTIONS.length; rIdx++) {
+                (function (cnt) {
+                    var chip = $('<div class="ck-chip selector' + (state.settings.battleRounds === cnt ? ' is-selected' : '') + '">' + cnt + ' раундов</div>');
+                    chip.on('hover:enter', function () {
+                        state.settings.battleRounds = cnt;
+                        sessionRound = 1;
+                        StorageManager.save(state);
+                        renderSettings();
+                    });
+                    rndGroup.find('.ck-chips').append(chip);
+                })(ROUNDS_OPTIONS[rIdx]);
+            }
+            panel.append(rndGroup);
+
+            var typeGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Тип контента</div><div class="ck-chips"></div></div>');
+            for (var i = 0; i < CONTENT_OPTIONS.length; i++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (state.settings.contentType === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        state.settings.contentType = opt.id;
+                        invalidatePools();
+                        renderSettings();
+                    });
+                    typeGroup.find('.ck-chips').append(chip);
+                })(CONTENT_OPTIONS[i]);
+            }
+            panel.append(typeGroup);
+
+            var ratGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Минимальный рейтинг</div><div class="ck-chips"></div></div>');
+            for (var r = 0; r < RATING_OPTIONS.length; r++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (state.settings.minRating === opt.value ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        state.settings.minRating = opt.value;
+                        invalidatePools();
+                        renderSettings();
+                    });
+                    ratGroup.find('.ck-chips').append(chip);
+                })(RATING_OPTIONS[r]);
+            }
+            panel.append(ratGroup);
+
+            var perGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Период выпуска</div><div class="ck-chips"></div></div>');
+            for (var p = 0; p < PERIOD_OPTIONS.length; p++) {
+                (function (opt) {
+                    var chip = $('<div class="ck-chip selector' + (state.settings.period === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        state.settings.period = opt.id;
+                        invalidatePools();
+                        renderSettings();
+                    });
+                    perGroup.find('.ck-chips').append(chip);
+                })(PERIOD_OPTIONS[p]);
+            }
+            panel.append(perGroup);
+
+            var exGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Исключить жанры из каталога</div><div class="ck-chips"></div></div>');
+            for (var g = 0; g < SELECTABLE_GENRES.length; g++) {
+                (function (gid) {
+                    var isEx = state.settings.excludedGenres.indexOf(gid) !== -1;
+                    var chip = $('<div class="ck-chip selector' + (isEx ? ' is-excluded' : '') + '">' + esc(getGenreName(gid)) + '</div>');
+                    chip.on('hover:enter', function () {
+                        var idx = state.settings.excludedGenres.indexOf(gid);
+                        if (idx === -1) state.settings.excludedGenres.push(gid);
+                        else state.settings.excludedGenres.splice(idx, 1);
+                        invalidatePools();
+                        renderSettings();
+                    });
+                    exGroup.find('.ck-chips').append(chip);
+                })(SELECTABLE_GENRES[g]);
+            }
+            panel.append(exGroup);
+
+            var perfGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Производительность (для слабых ТВ)</div><div class="ck-chips"></div></div>');
+            var liteChip = $('<div class="ck-chip selector' + (state.settings.liteAnimations ? ' is-selected' : '') + '">' + (state.settings.liteAnimations ? 'Упрощённые анимации: ВКЛ' : 'Упрощённые анимации: ВЫКЛ') + '</div>');
+            liteChip.on('hover:enter', function () {
+                state.settings.liteAnimations = !state.settings.liteAnimations;
+                applyMotionClass();
+                StorageManager.save(state);
+                renderSettings();
+            });
+            perfGroup.find('.ck-chips').append(liteChip);
+            panel.append(perfGroup);
+
+            // --- НАСТРОЙКИ РАЗДЕЛА «ПОДДЕРЖАТЬ АВТОРА» И ПОДПИСИ ---
+            var supConfigPanel = $('<div class="ck-panel"><div class="ck-panel-title">Настройки раздела «Поддержать автора» и подписи</div></div>');
+
+            var sigGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Авторская подпись («При підтримці ANDRPROD»)</div><div class="ck-chips"></div></div>');
+            var sigEnableChip = $('<div class="ck-chip selector' + (sup.signatureEnabled ? ' is-selected' : '') + '">' + (sup.signatureEnabled ? 'Подпись: ВКЛ' : 'Подпись: ВЫКЛ') + '</div>');
+            sigEnableChip.on('hover:enter', function () {
+                sup.signatureEnabled = !sup.signatureEnabled;
+                StorageManager.save(state);
+                renderTopbar();
+                renderSettings();
+            });
+
+            var sigTopChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'top' ? ' is-selected' : '') + '">Расположение: Верх</div>');
+            sigTopChip.on('hover:enter', function () {
+                sup.signaturePosition = 'top';
+                StorageManager.save(state);
+                renderTopbar();
+                renderSettings();
+            });
+
+            var sigBotChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'bottom' ? ' is-selected' : '') + '">Расположение: Низ</div>');
+            sigBotChip.on('hover:enter', function () {
+                sup.signaturePosition = 'bottom';
+                StorageManager.save(state);
+                renderTopbar();
+                renderSettings();
+            });
+
+            sigGroup.find('.ck-chips').append(sigEnableChip).append(sigTopChip).append(sigBotChip);
+            supConfigPanel.append(sigGroup);
+
+            var editFields = [
+                { key: 'cardNumber', title: 'Номер карты Monobank' },
+                { key: 'monobankUrl', title: 'Ссылка Monobank' },
+                { key: 'serviceLampaUrl', title: 'Ссылка: Заказать Lampa под ключ' },
+                { key: 'qrCode1Url', title: 'HTTPS-ссылка на QR-код №1' },
+                { key: 'qrCode2Url', title: 'HTTPS-ссылка на QR-код №2' },
+                { key: 'signatureText', title: 'Текст авторской подписи' }
+            ];
+
+            var editList = $('<div class="ck-edit-list"></div>');
+            for (var ef = 0; ef < editFields.length; ef++) {
+                (function (f) {
+                    var valDisplay = sup[f.key] ? String(sup[f.key]) : 'Не указано';
+                    var row = $(
+                        '<div class="ck-edit-row selector">' +
+                            '<span class="ck-edit-key">' + esc(f.title) + '</span>' +
+                            '<span class="ck-edit-val">' + esc(valDisplay) + '</span>' +
+                        '</div>'
+                    );
+                    row.on('hover:enter', function () {
+                        promptEditField(f.title, sup[f.key], function (newVal) {
+                            sup[f.key] = newVal;
+                            StorageManager.save(state);
+                            renderTopbar();
+                            renderSettings();
+                            showToast('Сохранено.');
+                        });
+                    });
+                    editList.append(row);
+                })(editFields[ef]);
+            }
+            supConfigPanel.append(editList);
+
+            // --- УПРАВЛЕНИЕ СОХРАНЁННЫМИ ДАННЫМИ ---
+            var resetPanel = $('<div class="ck-panel"><div class="ck-panel-title">Управление сохранёнными данными</div><div class="ck-actions"></div></div>');
+
+            var resetTasteBtn = $('<div class="ck-btn ck-btn--danger selector">Сбросить профиль вкусов</div>');
+            resetTasteBtn.on('hover:enter', function () {
+                state.stats = { comparisons: 0, wins: 0, skips: 0 };
+                state.genreScores = {};
+                state.decadeScores = {};
+                state.typeScores = { movie: 0, tv: 0 };
+                state.ratingSum = 0;
+                state.ratingCount = 0;
+                state.tasteTimeline = [];
+                recsList = [];
+                StorageManager.save(state);
+                showToast('Профиль предпочтений сброшен.');
+            });
+
+            var resetHistBtn = $('<div class="ck-btn ck-btn--danger selector">Очистить победителей и историю</div>');
+            resetHistBtn.on('hover:enter', function () {
+                state.winners = [];
+                state.history = [];
+                state.koth = { champion: null, streak: 0, round: 1, hallOfFame: [] };
+                battleSeen = {};
+                kothSeen = {};
+                StorageManager.save(state);
+                showToast('Список победителей и история очищены.');
+            });
+
+            resetPanel.find('.ck-actions').append(resetTasteBtn).append(resetHistBtn);
+
+            view.append(panel).append(supConfigPanel).append(resetPanel);
+            body.empty().append(view);
+
+            var firstBodyEl = body.find('.selector').first();
+            refreshFocus(firstBodyEl.length ? firstBodyEl : topbar.find('.is-active'));
+        }
+
+        // ---------------------------------------------------------------------
+        // ЭКРАН ОШИБКИ
+        // ---------------------------------------------------------------------
+
+        function renderErrorState(message, onRetry) {
+            var box = $('<div class="ck-state-box"><div style="margin-bottom:1.1em;color:#fca5a5;">' + esc(message) + '</div></div>');
+            var retryBtn = $('<div class="ck-btn ck-btn--primary selector">Повторить</div>');
+            retryBtn.on('hover:enter', function () {
+                if (onRetry) onRetry();
+            });
+            box.append(retryBtn);
+            body.empty().append(box);
+            refreshFocus(retryBtn);
+        }
+
+        // ---------------------------------------------------------------------
+        // ЖИЗНЕННЫЙ ЦИКЛ КОМПОНЕНТА LAMPA
+        // ---------------------------------------------------------------------
+
+        this.create = function () {
+            injectStyles();
+            applyMotionClass();
+            contentWrap.append(topbar).append(body).append(footerSig);
+            html.append(contentWrap);
+            scroll.append(html);
+            shell.append(bgStage).append(scroll.render());
+            $('body').append(toastEl);
+
+            shell.on('wheel.ck', function (e) {
+                var orig = e.originalEvent || e;
+                var delta = orig.deltaY || 0;
+                if (delta !== 0 && typeof scroll.wheel === 'function') {
+                    scroll.wheel(delta > 0 ? 120 : -120);
+                }
+            });
+
+            renderTopbar();
+            renderHome();
+            return this.render();
+        };
+
+        this.start = function () {
+            Lampa.Controller.add('content', {
+                toggle: function () {
+                    Lampa.Controller.collectionSet(html);
+                    Lampa.Controller.collectionFocus(lastFocused || false, html);
+                },
+                left: function () {
+                    if (Navigator.canmove('left')) Navigator.move('left');
+                    else Lampa.Controller.toggle('menu');
+                },
+                right: function () {
+                    if (Navigator.canmove('right')) Navigator.move('right');
+                },
+                up: function () {
+                    if (Navigator.canmove('up')) Navigator.move('up');
+                    else Lampa.Controller.toggle('head');
+                },
+                down: function () {
+                    if (Navigator.canmove('down')) Navigator.move('down');
+                },
+                back: function () {
+                    if (isRouletteSpinning) return;
+                    if (activeTab === 'roulette' && rouletteResult) {
+                        rouletteResult = null;
+                        renderRoulette();
+                    } else if (activeTab === 'roulette' && state.roulette.streamMode) {
+                        state.roulette.streamMode = false;
+                        StorageManager.save(state);
+                        renderRoulette();
+                    } else if (activeTab === 'wizard' && wizardStep > 1) {
+                        wizardStep -= 1;
+                        renderWizard();
+                    } else if (activeTab !== 'home') {
+                        switchTab('home');
+                    } else {
+                        Lampa.Activity.backward();
+                    }
+                }
+            });
+
+            Lampa.Controller.toggle('content');
+        };
+
+        this.pause = function () {
+            backdropMgr.stopSlideshow();
+            stopRouletteAnimation();
+        };
+
+        this.stop = function () {
+            backdropMgr.stopSlideshow();
+            stopRouletteAnimation();
+        };
+
+        this.render = function () {
+            return shell;
+        };
+
+        this.destroy = function () {
+            clearTimeout(toastTimer);
+            stopRouletteAnimation();
+            backdropMgr.destroy();
+            shell.off('wheel.ck');
+            network.clear();
+            scroll.destroy();
+            toastEl.remove();
+            shell.remove();
+        };
+    }
+
+    // =========================================================================
+    // РЕГИСТРАЦИЯ ПЛАГИНА И КНОПКИ «CINEMA KING» В ГЛАВНОМ МЕНЮ LAMPA
+    // =========================================================================
+
+    function addMenuButton() {
+        var menuList = $('.menu .menu__list').eq(0);
+        if (!menuList.length) return false;
+        if (menuList.find('.ck-menu-item').length) return true;
+
+        var icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h20L20 7l-5 4-3-6-3 6-5-4-2 11z"/></svg>';
+
+        var item = $(
+            '<li class="menu__item selector ck-menu-item">' +
+                '<div class="menu__ico">' + icon + '</div>' +
+                '<div class="menu__text">Cinema King</div>' +
+            '</li>'
+        );
+
+        item.on('hover:enter', function () {
+            Lampa.Activity.push({
+                url: '',
+                title: 'Cinema King',
+                component: PLUGIN_ID,
+                page: 1
+            });
+        });
+
+        menuList.append(item);
+        return true;
+    }
+
+    function ensureMenuButtonMounted() {
+        if (addMenuButton()) return;
+        var attempts = 0;
+        var timer = setInterval(function () {
+            attempts += 1;
+            if (addMenuButton() || attempts >= 50) {
+                clearInterval(timer);
+            }
+        }, 300);
+    }
+
+    function initPlugin() {
+        Lampa.Component.add(PLUGIN_ID, CinemaKingComponent);
+        ensureMenuButtonMounted();
+    }
+
+    if (window.appready) {
+        initPlugin();
+    } else {
+        Lampa.Listener.follow('app', function (e) {
+            if (e.type === 'ready') initPlugin();
+        });
+    }
+
+    Lampa.Listener.follow('menu', function () {
+        addMenuButton();
+    });
+})();
