@@ -7,74 +7,12 @@
 
     var PLUGIN_ID = 'cinema_king';
     var STORAGE_KEY = 'cinema_king_state_v2';
-    var STYLE_ID = 'cinema-king-styles-responsive-v8';
+    var STYLE_ID = 'cinema-king-styles-responsive-v10';
 
-    // Предоставленный QR-код №1: @ANDRPRODPAY (для банковского перевода и Telegram)
-    var QR_TELEGRAM_ANDRPRODPAY = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 420">' +
-        '<rect width="360" height="420" rx="28" fill="#181818"/>' +
-        '<rect x="34" y="34" width="292" height="352" rx="44" fill="#ffffff"/>' +
-        '<g fill="#0c0c0c">' +
-        /* Угловые поисковые узоры (Finder Patterns) */
-        '<rect x="64" y="64" width="62" height="62" rx="16"/><rect x="75" y="75" width="40" height="40" rx="9" fill="#ffffff"/><rect x="85" y="85" width="20" height="20" rx="5"/>' +
-        '<rect x="234" y="64" width="62" height="62" rx="16"/><rect x="245" y="75" width="40" height="40" rx="9" fill="#ffffff"/><rect x="255" y="85" width="20" height="20" rx="5"/>' +
-        '<rect x="64" y="234" width="62" height="62" rx="16"/><rect x="75" y="245" width="40" height="40" rx="9" fill="#ffffff"/><rect x="85" y="255" width="20" height="20" rx="5"/>' +
-        /* Верхняя центральная область */
-        '<rect x="140" y="66" width="12" height="12" rx="4"/><rect x="164" y="66" width="24" height="12" rx="4"/><rect x="200" y="66" width="22" height="12" rx="4"/>' +
-        '<rect x="140" y="88" width="24" height="12" rx="4"/><rect x="176" y="88" width="12" height="24" rx="4"/><rect x="200" y="88" width="12" height="12" rx="4"/><rect x="212" y="100" width="12" height="24" rx="4"/>' +
-        '<rect x="140" y="112" width="12" height="24" rx="4"/><rect x="164" y="122" width="36" height="12" rx="4"/>' +
-        /* Левая центральная область */
-        '<rect x="66" y="140" width="12" height="24" rx="4"/><rect x="90" y="140" width="36" height="12" rx="4"/>' +
-        '<rect x="78" y="164" width="24" height="12" rx="4"/><rect x="114" y="164" width="12" height="24" rx="4"/>' +
-        '<rect x="66" y="188" width="36" height="12" rx="4"/><rect x="66" y="210" width="24" height="12" rx="4"/><rect x="102" y="200" width="24" height="22" rx="4"/>' +
-        /* Правая центральная область */
-        '<rect x="234" y="140" width="24" height="12" rx="4"/><rect x="270" y="140" width="24" height="12" rx="4"/>' +
-        '<rect x="246" y="162" width="12" height="26" rx="4"/><rect x="270" y="162" width="24" height="12" rx="4"/>' +
-        '<rect x="234" y="198" width="36" height="12" rx="4"/><rect x="282" y="186" width="12" height="36" rx="4"/>' +
-        /* Нижняя центральная и правая область */
-        '<rect x="140" y="234" width="24" height="12" rx="4"/><rect x="176" y="234" width="12" height="24" rx="4"/><rect x="200" y="234" width="24" height="12" rx="4"/>' +
-        '<rect x="140" y="258" width="12" height="36" rx="4"/><rect x="164" y="270" width="36" height="12" rx="4"/><rect x="210" y="258" width="12" height="36" rx="4"/>' +
-        '<rect x="236" y="236" width="44" height="44" rx="10"/><rect x="246" y="246" width="24" height="24" rx="5" fill="#ffffff"/><rect x="253" y="253" width="10" height="10" rx="2"/>' +
-        '<rect x="236" y="286" width="24" height="10" rx="4"/><rect x="272" y="286" width="22" height="10" rx="4"/>' +
-        '</g>' +
-        /* Центральная иконка бумажного самолётика Telegram */
-        '<circle cx="180" cy="180" r="28" fill="#0c0c0c"/>' +
-        '<path d="M166 180l27-11-5 24-8-7-6 5v-8l16-13-20 12z" fill="#ffffff"/>' +
-        /* Подпись @ANDRPRODPAY */
-        '<text x="180" y="346" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif" font-weight="800" font-size="25" letter-spacing="0.5" fill="#0c0c0c">@ANDRPRODPAY</text>' +
-        '</svg>'
-    );
-
-    // Предоставленный QR-код №2: Monobank (https://send.monobank.ua/7svuxTzQsS)
-    var QR_MONOBANK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 340">' +
-        '<defs><linearGradient id="mbBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#111a4a"/><stop offset="100%" stop-color="#073140"/></linearGradient></defs>' +
-        '<rect width="400" height="340" rx="24" fill="url(#mbBg)"/>' +
-        /* Ушки кота Monobank */
-        '<path d="M150 66 L166 20 L196 62 Z" fill="#ffffff" stroke="#000000" stroke-width="6" stroke-linejoin="round"/>' +
-        '<path d="M216 62 L262 30 L252 66 Z" fill="#ffffff" stroke="#000000" stroke-width="6" stroke-linejoin="round"/>' +
-        /* Основной белый блок QR */
-        '<rect x="86" y="60" width="228" height="228" rx="34" fill="#ffffff" stroke="#000000" stroke-width="6"/>' +
-        /* Левая и правая лапки кота */
-        '<path d="M86 82 C58 82, 58 114, 80 119 C60 126, 65 148, 86 146 Z" fill="#ffffff" stroke="#000000" stroke-width="6" stroke-linejoin="round"/>' +
-        '<path d="M314 224 C342 224, 342 256, 320 261 C340 268, 335 290, 314 288 Z" fill="#ffffff" stroke="#000000" stroke-width="6" stroke-linejoin="round"/>' +
-        '<g fill="#0c0c0c">' +
-        /* Угловые квадраты */
-        '<rect x="112" y="86" width="48" height="48"/><rect x="120" y="94" width="32" height="32" fill="#ffffff"/><rect x="128" y="102" width="16" height="16"/>' +
-        '<rect x="240" y="86" width="48" height="48"/><rect x="248" y="94" width="32" height="32" fill="#ffffff"/><rect x="256" y="102" width="16" height="16"/>' +
-        '<rect x="112" y="214" width="48" height="48"/><rect x="120" y="222" width="32" height="32" fill="#ffffff"/><rect x="128" y="230" width="16" height="16"/>' +
-        /* Модули данных */
-        '<rect x="172" y="88" width="12" height="12"/><rect x="196" y="88" width="24" height="12"/><rect x="172" y="110" width="24" height="12"/><rect x="210" y="110" width="16" height="24"/>' +
-        '<rect x="112" y="148" width="14" height="24"/><rect x="138" y="148" width="24" height="14"/><rect x="120" y="182" width="32" height="14"/>' +
-        '<rect x="240" y="148" width="24" height="14"/><rect x="274" y="148" width="14" height="26"/><rect x="246" y="182" width="42" height="14"/>' +
-        '<rect x="174" y="214" width="24" height="14"/><rect x="210" y="214" width="14" height="26"/><rect x="240" y="214" width="48" height="14"/>' +
-        '<rect x="174" y="242" width="40" height="18"/><rect x="228" y="240" width="26" height="20"/><rect x="268" y="242" width="20" height="18"/>' +
-        '</g>' +
-        /* Центральный значок Monobank "m" */
-        '<circle cx="200" cy="174" r="24" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2"/>' +
-        '<text x="200" y="181" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="20" fill="#64748b">m</text>' +
-        '</svg>'
-    );
+    // Постоянные HTTPS-ссылки на два оригинальных прикреплённых изображения QR-кодов в репозитории GitHub
+    // Не генерируем, не перерисовываем и не изменяем содержимое QR-кодов
+    var DEFAULT_QR_CODE_1_URL = 'https://raw.githubusercontent.com/ANDRPRODPAY/cinema-king/main/qr-code-1.jpg';
+    var DEFAULT_QR_CODE_2_URL = 'https://raw.githubusercontent.com/ANDRPRODPAY/cinema-king/main/qr-code-2.jpg';
 
     var GENRES_MAP = {
         28: 'Боевик',
@@ -224,11 +162,7 @@
         var clean = String(url || '').trim();
         if (!clean) return;
         if (!/^https?:\/\//i.test(clean) && !/^tg:\/\//i.test(clean)) {
-            if (clean.charAt(0) === '@') {
-                clean = 'https://t.me/' + clean.substring(1);
-            } else {
-                clean = 'https://' + clean;
-            }
+            clean = 'https://' + clean;
         }
         try {
             var win = window.open(clean, '_blank');
@@ -439,13 +373,9 @@
             support: {
                 cardNumber: '4441111054843507',
                 monobankUrl: 'https://send.monobank.ua/7svuxTzQsS',
-                telegramUrl: 'https://t.me/ANDRPRODPAY',
-                showCard: true,
-                showMonobank: true,
-                showTelegram: true,
+                qrCode1Url: DEFAULT_QR_CODE_1_URL,
+                qrCode2Url: DEFAULT_QR_CODE_2_URL,
                 serviceLampaUrl: '',
-                serviceAccountUrl: '',
-                serviceChatUrl: '',
                 signatureEnabled: true,
                 signatureText: 'При підтримці ANDRPROD',
                 signaturePosition: 'bottom'
@@ -576,17 +506,27 @@
                     def.quiz.gamesPlayed = Math.max(0, parseInt(raw.quiz.gamesPlayed, 10) || 0);
                 }
                 if (raw.support && typeof raw.support === 'object') {
-                    if (typeof raw.support.cardNumber === 'string') def.support.cardNumber = raw.support.cardNumber;
-                    if (typeof raw.support.monobankUrl === 'string') def.support.monobankUrl = raw.support.monobankUrl;
-                    if (typeof raw.support.telegramUrl === 'string') def.support.telegramUrl = raw.support.telegramUrl;
-                    if (raw.support.showCard !== undefined) def.support.showCard = !!raw.support.showCard;
-                    if (raw.support.showMonobank !== undefined) def.support.showMonobank = !!raw.support.showMonobank;
-                    if (raw.support.showTelegram !== undefined) def.support.showTelegram = !!raw.support.showTelegram;
-                    if (typeof raw.support.serviceLampaUrl === 'string') def.support.serviceLampaUrl = raw.support.serviceLampaUrl;
-                    if (typeof raw.support.serviceAccountUrl === 'string') def.support.serviceAccountUrl = raw.support.serviceAccountUrl;
-                    if (typeof raw.support.serviceChatUrl === 'string') def.support.serviceChatUrl = raw.support.serviceChatUrl;
-                    if (raw.support.signatureEnabled !== undefined) def.support.signatureEnabled = !!raw.support.signatureEnabled;
-                    if (typeof raw.support.signatureText === 'string') def.support.signatureText = raw.support.signatureText;
+                    if (typeof raw.support.cardNumber === 'string' && raw.support.cardNumber) {
+                        def.support.cardNumber = raw.support.cardNumber;
+                    }
+                    if (typeof raw.support.monobankUrl === 'string' && raw.support.monobankUrl) {
+                        def.support.monobankUrl = raw.support.monobankUrl;
+                    }
+                    if (typeof raw.support.qrCode1Url === 'string' && raw.support.qrCode1Url) {
+                        def.support.qrCode1Url = raw.support.qrCode1Url;
+                    }
+                    if (typeof raw.support.qrCode2Url === 'string' && raw.support.qrCode2Url) {
+                        def.support.qrCode2Url = raw.support.qrCode2Url;
+                    }
+                    if (typeof raw.support.serviceLampaUrl === 'string') {
+                        def.support.serviceLampaUrl = raw.support.serviceLampaUrl;
+                    }
+                    if (raw.support.signatureEnabled !== undefined) {
+                        def.support.signatureEnabled = !!raw.support.signatureEnabled;
+                    }
+                    if (typeof raw.support.signatureText === 'string') {
+                        def.support.signatureText = raw.support.signatureText;
+                    }
                     if (['top', 'bottom'].indexOf(raw.support.signaturePosition) !== -1) {
                         def.support.signaturePosition = raw.support.signaturePosition;
                     }
@@ -1312,7 +1252,7 @@
     };
 
     // =========================================================================
-    // ВСТРОЕННЫЕ СТИЛИ (АДАПТИВНАЯ ВЁРСТКА + ПРОКРУТКА + РАЗДЕЛ ПОДДЕРЖКИ)
+    // ВСТРОЕННЫЕ СТИЛИ
     // =========================================================================
 
     function injectStyles() {
@@ -1346,8 +1286,9 @@
             '.ck-brand { display: flex; align-items: center; gap: 0.6em; flex-shrink: 0; }' +
             '.ck-brand-mark { width: 2.05em; height: 2.05em; border-radius: 0.55em; background: #1d4ed8; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }' +
             '.ck-brand-title { font-size: 1.18em; font-weight: 800; letter-spacing: 0.04em; color: #ffffff; white-space: nowrap; }' +
-            '.ck-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 0.36em; }' +
-            '.ck-tab { display: inline-flex; align-items: center; justify-content: center; min-height: 2.45em; padding: 0.42em 0.85em; border-radius: 0.52em; background: rgba(17,24,39,0.78); border: 1px solid rgba(148,163,184,0.16); color: #cbd5e1; font-size: 0.84em; font-weight: 600; cursor: pointer; white-space: nowrap; transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease; }' +
+            '.ck-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 0.34em; }' +
+            '.ck-tab { display: inline-flex; align-items: center; justify-content: center; min-height: 2.45em; padding: 0.42em 0.8em; border-radius: 0.52em; background: rgba(17,24,39,0.78); border: 1px solid rgba(148,163,184,0.16); color: #cbd5e1; font-size: 0.82em; font-weight: 600; cursor: pointer; white-space: nowrap; transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease; }' +
+            '.ck-tab--support { border-color: rgba(59,130,246,0.42); color: #93c5fd; }' +
             '.ck-tab.is-active { background: #1d4ed8; border-color: #3b82f6; color: #ffffff; }' +
             '.ck-tab.focus { transform: scale(1.04); border-color: #60a5fa; box-shadow: 0 0 0 2px #3b82f6; color: #ffffff; }' +
 
@@ -1373,6 +1314,31 @@
             '.ck-kpi-label { font-size: 0.78em; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4em; }' +
             '.ck-kpi-value { font-size: clamp(1.5em, 2.2vw, 2em); font-weight: 800; color: #ffffff; line-height: 1.1; }' +
             '.ck-kpi-text { font-size: 0.92em; color: #cbd5e1; line-height: 1.45; margin-top: 0.25em; }' +
+
+            /* ===================================================================== */
+            /* ОТДЕЛЬНАЯ СТРАНИЦА «ПОДДЕРЖАТЬ АВТОРА»                                */
+            /* ===================================================================== */
+            '.ck-donate-page { width: 100%; max-width: min(68em, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 1.35em; }' +
+            '.ck-donate-hero { padding: 0.4em 0 0.2em; }' +
+            '.ck-donate-title { font-size: clamp(1.75em, 2.8vw, 2.45em); font-weight: 800; line-height: 1.15; color: #ffffff; margin: 0 0 0.4em; }' +
+            '.ck-donate-desc { font-size: clamp(0.95em, 1.08vw, 1.08em); line-height: 1.55; color: #cbd5e1; margin: 0; max-width: 52em; }' +
+
+            /* Блок банковской карты Monobank */
+            '.ck-card-box { padding: clamp(1.25em, 2.4vw, 1.8em); border-radius: 0.95em; background: rgba(13,19,31,0.94); border: 1px solid rgba(59,130,246,0.38); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.2em; }' +
+            '.ck-card-box-label { font-size: 0.82em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #60a5fa; margin-bottom: 0.4em; }' +
+            '.ck-card-box-number { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: clamp(1.45em, 2.4vw, 2.15em); font-weight: 900; letter-spacing: 0.1em; color: #ffffff; word-break: break-all; }' +
+            '.ck-card-box-actions { display: flex; flex-wrap: wrap; gap: 0.75em; }' +
+
+            /* Сетка из двух оригинальных QR-кодов рядом друг с другом */
+            '.ck-qr-pair-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1em, 2vw, 1.6em); width: 100%; }' +
+            '.ck-qr-slot { display: flex; align-items: center; justify-content: center; padding: clamp(1em, 2vw, 1.5em); border-radius: 0.95em; background: rgba(15,20,30,0.92); border: 1px solid rgba(148,163,184,0.2); min-height: 16em; }' +
+            '.ck-qr-slot img { width: 100%; max-width: 270px; height: auto; max-height: 310px; object-fit: contain; border-radius: 0.75em; display: block; }' +
+            '.ck-qr-missing { text-align: center; font-size: 0.85em; color: #94a3b8; line-height: 1.45; padding: 1em; }' +
+
+            /* Блок «Хочешь Lampa под ключ?» */
+            '.ck-turnkey-box { padding: clamp(1.25em, 2.4vw, 1.8em); border-radius: 0.95em; background: rgba(15,20,30,0.92); border: 1px solid rgba(148,163,184,0.2); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.2em; }' +
+            '.ck-turnkey-title { font-size: clamp(1.25em, 1.8vw, 1.55em); font-weight: 800; color: #ffffff; margin: 0 0 0.35em; }' +
+            '.ck-turnkey-desc { font-size: 0.95em; line-height: 1.5; color: #cbd5e1; margin: 0; max-width: 44em; }' +
 
             /* Арена и прогресс */
             '.ck-arena-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.65em; margin-bottom: 0.7em; }' +
@@ -1511,7 +1477,6 @@
             /* Панели статистики и настроек */
             '.ck-panel { padding: clamp(1em, 2vw, 1.5em); border-radius: 0.85em; background: rgba(15,20,30,0.9); border: 1px solid rgba(148,163,184,0.15); margin-bottom: 1.15em; width: 100%; }' +
             '.ck-panel-title { font-size: 1.12em; font-weight: 800; color: #ffffff; margin: 0 0 0.35em; }' +
-            '.ck-panel-sub { font-size: 0.9em; color: #94a3b8; margin: 0 0 1.1em; line-height: 1.45; }' +
             '.ck-bar-row { margin-bottom: 0.78em; }' +
             '.ck-bar-head { display: flex; justify-content: space-between; font-size: 0.88em; margin-bottom: 0.3em; color: #e2e8f0; }' +
             '.ck-bar-track { height: 0.56em; border-radius: 999px; background: rgba(30,41,59,0.9); overflow: hidden; }' +
@@ -1527,20 +1492,6 @@
             '.ck-chip.is-selected { background: #1d4ed8; border-color: #60a5fa; color: #ffffff; }' +
             '.ck-chip.is-excluded { background: rgba(153,27,27,0.75); border-color: #f87171; color: #fee2e2; text-decoration: line-through; }' +
             '.ck-chip.focus { transform: scale(1.04); box-shadow: 0 0 0 2px #3b82f6; color: #ffffff; }' +
-
-            /* Раздел «Поддержать автора» и «Дополнительные услуги» */
-            '.ck-support-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18.5em, 1fr)); gap: 1.1em; margin-bottom: 1.35em; width: 100%; }' +
-            '.ck-support-card { display: flex; flex-direction: column; justify-content: space-between; gap: 0.9em; padding: 1.25em; border-radius: 0.85em; background: rgba(11,16,26,0.92); border: 1px solid rgba(59,130,246,0.25); min-width: 0; }' +
-            '.ck-support-card-title { font-size: 1.05em; font-weight: 800; color: #ffffff; margin: 0 0 0.35em; }' +
-            '.ck-support-card-num { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 1.15em; font-weight: 800; letter-spacing: 0.08em; color: #93c5fd; padding: 0.45em 0.7em; border-radius: 0.45em; background: rgba(29,78,216,0.16); border: 1px solid rgba(59,130,246,0.3); word-break: break-all; margin-bottom: 0.65em; }' +
-            '.ck-qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.55em; padding: 0.75em; border-radius: 0.75em; background: rgba(17,24,39,0.75); border: 1px solid rgba(148,163,184,0.14); }' +
-            '.ck-qr-img { width: clamp(148px, 14vw, 196px); height: clamp(148px, 14vw, 196px); object-fit: contain; border-radius: 0.65em; display: block; }' +
-            '.ck-qr-caption { font-size: 0.82em; color: #cbd5e1; text-align: center; line-height: 1.38; }' +
-
-            '.ck-services-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17em, 1fr)); gap: 1em; width: 100%; }' +
-            '.ck-service-card { display: flex; flex-direction: column; justify-content: space-between; gap: 0.85em; padding: 1.15em 1.25em; border-radius: 0.8em; background: rgba(17,24,39,0.86); border: 1px solid rgba(148,163,184,0.18); min-width: 0; }' +
-            '.ck-service-title { font-size: 1em; font-weight: 800; color: #ffffff; margin: 0 0 0.35em; }' +
-            '.ck-service-desc { font-size: 0.86em; color: #94a3b8; line-height: 1.42; margin: 0; }' +
 
             '.ck-edit-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(21em, 1fr)); gap: 0.65em; width: 100%; }' +
             '.ck-edit-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75em; padding: 0.65em 0.9em; border-radius: 0.6em; background: rgba(17,24,39,0.85); border: 1px solid rgba(148,163,184,0.2); cursor: pointer; min-width: 0; transition: border-color 0.15s ease, transform 0.15s ease; }' +
@@ -1607,8 +1558,10 @@
                 '.ck-nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 0.25em; scrollbar-width: none; }' +
                 '.ck-nav::-webkit-scrollbar { display: none; }' +
                 '.ck-tab { flex-shrink: 0; min-height: 2.7em; padding: 0.5em 0.95em; font-size: 0.88em; }' +
-                '.ck-actions { flex-direction: column; width: 100%; }' +
-                '.ck-actions .ck-btn { width: 100%; }' +
+                '.ck-actions, .ck-card-box-actions { flex-direction: column; width: 100%; }' +
+                '.ck-actions .ck-btn, .ck-card-box-actions .ck-btn, .ck-turnkey-box .ck-btn { width: 100%; }' +
+                '.ck-qr-pair-grid { grid-template-columns: 1fr; }' +
+                '.ck-qr-slot img { max-width: 240px; }' +
                 '.ck-card { flex-direction: column; min-height: auto; }' +
                 '.ck-card-poster { width: 100%; min-width: 100%; height: 14.5em; }' +
                 '.ck-card-info { padding: 1em; }' +
@@ -1625,8 +1578,7 @@
                 '.ck-quiz-frame-box { height: clamp(10.5em, 28dvh, 14em); margin-bottom: 0.55em; }' +
                 '.ck-quiz-options { grid-template-columns: 1fr; gap: 0.45em; }' +
                 '.ck-quiz-opt { min-height: 2.55em; padding: 0.52em 0.85em; font-size: 0.9em; }' +
-                '.ck-support-grid, .ck-services-grid, .ck-edit-list { grid-template-columns: 1fr; }' +
-                '.ck-qr-img { width: 180px; height: 180px; }' +
+                '.ck-edit-list { grid-template-columns: 1fr; }' +
                 '.ck-bg-caption { display: none; }' +
             '}' +
 
@@ -1776,7 +1728,6 @@
             });
         }
 
-        // Синхронизация прокрутки при навигации пультом, мышью и сенсорным экраном
         function ensureElementVisible(el) {
             if (!el || !el.length) return;
             try {
@@ -1848,6 +1799,7 @@
                 { id: 'recs', label: 'Рекомендации' },
                 { id: 'winners', label: 'Мои победители' },
                 { id: 'taste', label: 'Мой вкус' },
+                { id: 'support', label: 'Поддержать автора', isSupport: true },
                 { id: 'settings', label: 'Настройки' }
             ];
 
@@ -1859,7 +1811,7 @@
 
             for (var i = 0; i < tabs.length; i++) {
                 (function (tab) {
-                    var cls = 'ck-tab selector' + (activeTab === tab.id ? ' is-active' : '');
+                    var cls = 'ck-tab selector' + (tab.isSupport ? ' ck-tab--support' : '') + (activeTab === tab.id ? ' is-active' : '');
                     var btn = $('<div class="' + cls + '">' + esc(tab.label) + '</div>');
                     btn.on('hover:enter', function () {
                         switchTab(tab.id);
@@ -1895,6 +1847,7 @@
             else if (tabId === 'recs') renderRecs();
             else if (tabId === 'winners') renderWinners();
             else if (tabId === 'taste') renderTaste();
+            else if (tabId === 'support') renderSupport();
             else if (tabId === 'settings') renderSettings();
         }
 
@@ -3928,244 +3881,100 @@
         }
 
         // ---------------------------------------------------------------------
-        // 10. РАЗДЕЛ «НАСТРОЙКИ» + «ПОДДЕРЖАТЬ АВТОРА» + УСЛУГИ + ПОДПИСЬ
+        // 10. ОТДЕЛЬНАЯ СТРАНИЦА «ПОДДЕРЖАТЬ АВТОРА» (В ГЛАВНОЙ НАВИГАЦИИ)
+        // ---------------------------------------------------------------------
+
+        function renderSupport() {
+            var sup = state.support;
+            var view = $('<div class="ck-view"></div>');
+            var page = $('<div class="ck-donate-page"></div>');
+
+            // 1. Заголовок и описание
+            page.append(
+                '<div class="ck-donate-hero">' +
+                    '<h1 class="ck-donate-title">Поддержать автора</h1>' +
+                    '<p class="ck-donate-desc">Cinema King развивается благодаря автору и поддержке пользователей. Если тебе нравится проект, ты можешь поддержать его развитие или заказать Lampa под ключ.</p>' +
+                '</div>'
+            );
+
+            // 2. Моя карта Monobank + кнопки копирования и перехода по ссылке Monobank
+            var cardBox = $(
+                '<div class="ck-card-box">' +
+                    '<div>' +
+                        '<div class="ck-card-box-label">Моя карта Monobank</div>' +
+                        '<div class="ck-card-box-number">' + esc(formatCardNumber(sup.cardNumber)) + '</div>' +
+                    '</div>' +
+                    '<div class="ck-card-box-actions"></div>' +
+                '</div>'
+            );
+
+            var copyBtn = $('<div class="ck-btn ck-btn--primary selector">Скопировать номер карты</div>');
+            copyBtn.on('hover:enter', function () {
+                copyTextToClipboard(sup.cardNumber, function () {
+                    showToast('Номер карты скопирован: ' + formatCardNumber(sup.cardNumber));
+                });
+            });
+
+            var monoBtn = $('<div class="ck-btn ck-btn--secondary selector">Перейти в Monobank</div>');
+            monoBtn.on('hover:enter', function () {
+                openExternalUrl(sup.monobankUrl, showToast);
+            });
+
+            cardBox.find('.ck-card-box-actions').append(copyBtn).append(monoBtn);
+            page.append(cardBox);
+
+            // 3. Два оригинальных прикреплённых QR-кода рядом друг с другом (вертикально на смартфонах)
+            var qrPair = $('<div class="ck-qr-pair-grid"></div>');
+            var qrUrls = [sup.qrCode1Url, sup.qrCode2Url];
+
+            for (var q = 0; q < qrUrls.length; q++) {
+                (function (imgUrl, idx) {
+                    var slot = $('<div class="ck-qr-slot"></div>');
+                    var img = $('<img src="' + esc(imgUrl) + '" alt="QR-код ' + (idx + 1) + '">');
+                    img.on('error', function () {
+                        $(this).replaceWith('<div class="ck-qr-missing">Не удалось загрузить QR-код.<br>Проверьте HTTPS-ссылку на изображение в настройках.</div>');
+                    });
+                    slot.append(img);
+                    qrPair.append(slot);
+                })(qrUrls[q], q);
+            }
+            page.append(qrPair);
+
+            // 4. Блок «Хочешь Lampa под ключ?»
+            var turnkeyBox = $(
+                '<div class="ck-turnkey-box">' +
+                    '<div>' +
+                        '<h2 class="ck-turnkey-title">Хочешь Lampa под ключ?</h2>' +
+                        '<p class="ck-turnkey-desc">Можно заказать полностью настроенную Lampa, приобрести готовый аккаунт или получить помощь с установкой и настройкой.</p>' +
+                    '</div>' +
+                '</div>'
+            );
+
+            var turnkeyBtn = $('<div class="ck-btn ck-btn--primary selector">Заказать Lampa под ключ</div>');
+            turnkeyBtn.on('hover:enter', function () {
+                if (sup.serviceLampaUrl && String(sup.serviceLampaUrl).trim()) {
+                    openExternalUrl(sup.serviceLampaUrl, showToast);
+                } else {
+                    showToast('Укажите ссылку на заказ Lampa под ключ в разделе «Настройки».');
+                }
+            });
+            turnkeyBox.append(turnkeyBtn);
+            page.append(turnkeyBox);
+
+            view.append(page);
+            body.empty().append(view);
+            refreshFocus(copyBtn);
+        }
+
+        // ---------------------------------------------------------------------
+        // 11. РАЗДЕЛ «НАСТРОЙКИ»
         // ---------------------------------------------------------------------
 
         function renderSettings() {
             var view = $('<div class="ck-view"></div>');
             var sup = state.support;
 
-            // --- БЛОК 1: ПОДДЕРЖАТЬ АВТОРА ---
-            var supportPanel = $(
-                '<div class="ck-panel">' +
-                    '<div class="ck-panel-title">Поддержать автора</div>' +
-                    '<div class="ck-panel-sub">Если тебе нравится Cinema King, ты можешь поддержать развитие проекта.</div>' +
-                '</div>'
-            );
-
-            var supportGrid = $('<div class="ck-support-grid"></div>');
-            var hasAnySupport = false;
-
-            // Карточка 1: Банковская карта
-            if (sup.showCard) {
-                hasAnySupport = true;
-                var cardBlock = $(
-                    '<div class="ck-support-card">' +
-                        '<div>' +
-                            '<div class="ck-support-card-title">Поддержать автора</div>' +
-                            '<div class="ck-support-card-num">' + esc(formatCardNumber(sup.cardNumber) || 'Номер не указан') + '</div>' +
-                            '<div class="ck-qr-wrap">' +
-                                '<img class="ck-qr-img" src="' + QR_TELEGRAM_ANDRPRODPAY + '" alt="QR-код для банковского перевода">' +
-                                '<div class="ck-qr-caption">Отсканируй QR-код, чтобы поддержать автора</div>' +
-                            '</div>' +
-                        '</div>' +
-                    '</div>'
-                );
-                var copyCardBtn = $('<div class="ck-btn ck-btn--primary ck-btn--sm selector" style="width:100%;">Скопировать номер карты</div>');
-                copyCardBtn.on('hover:enter', function () {
-                    if (!sup.cardNumber) {
-                        showToast('Номер карты не указан в настройках.');
-                        return;
-                    }
-                    copyTextToClipboard(sup.cardNumber, function () {
-                        showToast('Номер карты скопирован: ' + formatCardNumber(sup.cardNumber));
-                    });
-                });
-                cardBlock.append(copyCardBtn);
-                supportGrid.append(cardBlock);
-            }
-
-            // Карточка 2: Monobank
-            if (sup.showMonobank) {
-                hasAnySupport = true;
-                var monoBlock = $(
-                    '<div class="ck-support-card">' +
-                        '<div>' +
-                            '<div class="ck-support-card-title">Monobank</div>' +
-                            '<div class="ck-qr-wrap">' +
-                                '<img class="ck-qr-img" src="' + QR_MONOBANK + '" alt="QR-код Monobank">' +
-                                '<div class="ck-qr-caption">Поддержать проект через Monobank</div>' +
-                            '</div>' +
-                        '</div>' +
-                    '</div>'
-                );
-                var monoBtn = $('<div class="ck-btn ck-btn--primary ck-btn--sm selector" style="width:100%;">Открыть банку Monobank</div>');
-                monoBtn.on('hover:enter', function () {
-                    if (!sup.monobankUrl) {
-                        showToast('Ссылка Monobank не указана.');
-                        return;
-                    }
-                    openExternalUrl(sup.monobankUrl, showToast);
-                });
-                monoBlock.append(monoBtn);
-                supportGrid.append(monoBlock);
-            }
-
-            // Карточка 3: Telegram
-            if (sup.showTelegram) {
-                hasAnySupport = true;
-                var tgBlock = $(
-                    '<div class="ck-support-card">' +
-                        '<div>' +
-                            '<div class="ck-support-card-title">Telegram</div>' +
-                            '<div class="ck-qr-wrap">' +
-                                '<img class="ck-qr-img" src="' + QR_TELEGRAM_ANDRPRODPAY + '" alt="QR-код Telegram @ANDRPRODPAY">' +
-                                '<div class="ck-qr-caption">@ANDRPRODPAY</div>' +
-                            '</div>' +
-                        '</div>' +
-                    '</div>'
-                );
-                var tgBtn = $('<div class="ck-btn ck-btn--primary ck-btn--sm selector" style="width:100%;">Перейти в Telegram</div>');
-                tgBtn.on('hover:enter', function () {
-                    if (!sup.telegramUrl) {
-                        showToast('Ссылка Telegram не указана.');
-                        return;
-                    }
-                    openExternalUrl(sup.telegramUrl, showToast);
-                });
-                tgBlock.append(tgBtn);
-                supportGrid.append(tgBlock);
-            }
-
-            if (hasAnySupport) {
-                supportPanel.append(supportGrid);
-            } else {
-                supportPanel.append('<div style="color:#94a3b8;margin-bottom:1em;font-size:0.88em;">Все карточки способов поддержки скрыты. Включить их можно ниже в настройках поддержки.</div>');
-            }
-
-            // Дополнительные услуги (3 карточки)
-            var servicesList = [
-                {
-                    title: 'Заказать Lampa под ключ',
-                    desc: 'Полная установка и настройка Lampa под твои предпочтения',
-                    url: sup.serviceLampaUrl
-                },
-                {
-                    title: 'Заказать настроенный аккаунт',
-                    desc: 'Готовый аккаунт с необходимыми настройками',
-                    url: sup.serviceAccountUrl
-                },
-                {
-                    title: 'Закрытый чат',
-                    desc: 'Присоединяйся к нашему закрытому сообществу',
-                    url: sup.serviceChatUrl
-                }
-            ];
-
-            var srvTitle = $('<div class="ck-setting-label" style="margin-top:0.4em;">Дополнительные услуги</div>');
-            var srvGrid = $('<div class="ck-services-grid"></div>');
-
-            for (var sv = 0; sv < servicesList.length; sv++) {
-                (function (srv) {
-                    var card = $(
-                        '<div class="ck-service-card">' +
-                            '<div>' +
-                                '<div class="ck-service-title">' + esc(srv.title) + '</div>' +
-                                '<p class="ck-service-desc">' + esc(srv.desc) + '</p>' +
-                            '</div>' +
-                        '</div>'
-                    );
-                    if (srv.url && String(srv.url).trim()) {
-                        var goBtn = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector" style="width:100%;">Перейти</div>');
-                        goBtn.on('hover:enter', function () {
-                            openExternalUrl(srv.url, showToast);
-                        });
-                        card.append(goBtn);
-                    }
-                    srvGrid.append(card);
-                })(servicesList[sv]);
-            }
-
-            supportPanel.append(srvTitle).append(srvGrid);
-            view.append(supportPanel);
-
-            // --- БЛОК 2: НАСТРОЙКИ ПОДДЕРЖКИ И ПОДПИСИ ANDRPROD ---
-            var supConfigPanel = $('<div class="ck-panel"><div class="ck-panel-title">Настройки поддержки и авторской подписи</div></div>');
-
-            var visGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Отображение способов поддержки</div><div class="ck-chips"></div></div>');
-            var visToggles = [
-                { key: 'showCard', label: 'Банковская карта' },
-                { key: 'showMonobank', label: 'Monobank' },
-                { key: 'showTelegram', label: 'Telegram' }
-            ];
-            for (var vt = 0; vt < visToggles.length; vt++) {
-                (function (item) {
-                    var active = !!sup[item.key];
-                    var chip = $('<div class="ck-chip selector' + (active ? ' is-selected' : '') + '">' + (active ? '✓ ' : '') + esc(item.label) + '</div>');
-                    chip.on('hover:enter', function () {
-                        sup[item.key] = !sup[item.key];
-                        StorageManager.save(state);
-                        renderSettings();
-                    });
-                    visGroup.find('.ck-chips').append(chip);
-                })(visToggles[vt]);
-            }
-            supConfigPanel.append(visGroup);
-
-            var sigGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Авторская подпись («При підтримці ANDRPROD»)</div><div class="ck-chips"></div></div>');
-            var sigEnableChip = $('<div class="ck-chip selector' + (sup.signatureEnabled ? ' is-selected' : '') + '">' + (sup.signatureEnabled ? 'Подпись: ВКЛ' : 'Подпись: ВЫКЛ') + '</div>');
-            sigEnableChip.on('hover:enter', function () {
-                sup.signatureEnabled = !sup.signatureEnabled;
-                StorageManager.save(state);
-                renderTopbar();
-                renderSettings();
-            });
-
-            var sigTopChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'top' ? ' is-selected' : '') + '">Расположение: Верх</div>');
-            sigTopChip.on('hover:enter', function () {
-                sup.signaturePosition = 'top';
-                StorageManager.save(state);
-                renderTopbar();
-                renderSettings();
-            });
-
-            var sigBotChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'bottom' ? ' is-selected' : '') + '">Расположение: Низ</div>');
-            sigBotChip.on('hover:enter', function () {
-                sup.signaturePosition = 'bottom';
-                StorageManager.save(state);
-                renderTopbar();
-                renderSettings();
-            });
-
-            sigGroup.find('.ck-chips').append(sigEnableChip).append(sigTopChip).append(sigBotChip);
-            supConfigPanel.append(sigGroup);
-
-            var editFields = [
-                { key: 'cardNumber', title: 'Номер банковской карты' },
-                { key: 'monobankUrl', title: 'Ссылка Monobank' },
-                { key: 'telegramUrl', title: 'Telegram-ссылка' },
-                { key: 'serviceLampaUrl', title: 'Ссылка: Заказать Lampa под ключ' },
-                { key: 'serviceAccountUrl', title: 'Ссылка: Заказать настроенный аккаунт' },
-                { key: 'serviceChatUrl', title: 'Ссылка: Закрытый чат' },
-                { key: 'signatureText', title: 'Текст авторской подписи' }
-            ];
-
-            var editList = $('<div class="ck-edit-list"></div>');
-            for (var ef = 0; ef < editFields.length; ef++) {
-                (function (f) {
-                    var valDisplay = sup[f.key] ? String(sup[f.key]) : 'Не указано';
-                    var row = $(
-                        '<div class="ck-edit-row selector">' +
-                            '<span class="ck-edit-key">' + esc(f.title) + '</span>' +
-                            '<span class="ck-edit-val">' + esc(valDisplay) + '</span>' +
-                        '</div>'
-                    );
-                    row.on('hover:enter', function () {
-                        promptEditField(f.title, sup[f.key], function (newVal) {
-                            sup[f.key] = newVal;
-                            StorageManager.save(state);
-                            renderTopbar();
-                            renderSettings();
-                            showToast('Сохранено.');
-                        });
-                    });
-                    editList.append(row);
-                })(editFields[ef]);
-            }
-            supConfigPanel.append(editList);
-            view.append(supConfigPanel);
-
-            // --- БЛОК 3: ПАРАМЕТРЫ ИГРЫ И КАТАЛОГА ---
+            // --- ПАРАМЕТРЫ ИГРЫ И КАТАЛОГА ---
             var panel = $('<div class="ck-panel"><div class="ck-panel-title">Параметры игры и каталога</div></div>');
 
             function invalidatePools() {
@@ -4265,6 +4074,71 @@
             perfGroup.find('.ck-chips').append(liteChip);
             panel.append(perfGroup);
 
+            // --- НАСТРОЙКИ РАЗДЕЛА «ПОДДЕРЖАТЬ АВТОРА» И ПОДПИСИ ---
+            var supConfigPanel = $('<div class="ck-panel"><div class="ck-panel-title">Настройки раздела «Поддержать автора» и подписи</div></div>');
+
+            var sigGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Авторская подпись («При підтримці ANDRPROD»)</div><div class="ck-chips"></div></div>');
+            var sigEnableChip = $('<div class="ck-chip selector' + (sup.signatureEnabled ? ' is-selected' : '') + '">' + (sup.signatureEnabled ? 'Подпись: ВКЛ' : 'Подпись: ВЫКЛ') + '</div>');
+            sigEnableChip.on('hover:enter', function () {
+                sup.signatureEnabled = !sup.signatureEnabled;
+                StorageManager.save(state);
+                renderTopbar();
+                renderSettings();
+            });
+
+            var sigTopChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'top' ? ' is-selected' : '') + '">Расположение: Верх</div>');
+            sigTopChip.on('hover:enter', function () {
+                sup.signaturePosition = 'top';
+                StorageManager.save(state);
+                renderTopbar();
+                renderSettings();
+            });
+
+            var sigBotChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'bottom' ? ' is-selected' : '') + '">Расположение: Низ</div>');
+            sigBotChip.on('hover:enter', function () {
+                sup.signaturePosition = 'bottom';
+                StorageManager.save(state);
+                renderTopbar();
+                renderSettings();
+            });
+
+            sigGroup.find('.ck-chips').append(sigEnableChip).append(sigTopChip).append(sigBotChip);
+            supConfigPanel.append(sigGroup);
+
+            var editFields = [
+                { key: 'cardNumber', title: 'Номер карты Monobank' },
+                { key: 'monobankUrl', title: 'Ссылка Monobank' },
+                { key: 'serviceLampaUrl', title: 'Ссылка: Заказать Lampa под ключ' },
+                { key: 'qrCode1Url', title: 'HTTPS-ссылка на QR-код №1' },
+                { key: 'qrCode2Url', title: 'HTTPS-ссылка на QR-код №2' },
+                { key: 'signatureText', title: 'Текст авторской подписи' }
+            ];
+
+            var editList = $('<div class="ck-edit-list"></div>');
+            for (var ef = 0; ef < editFields.length; ef++) {
+                (function (f) {
+                    var valDisplay = sup[f.key] ? String(sup[f.key]) : 'Не указано';
+                    var row = $(
+                        '<div class="ck-edit-row selector">' +
+                            '<span class="ck-edit-key">' + esc(f.title) + '</span>' +
+                            '<span class="ck-edit-val">' + esc(valDisplay) + '</span>' +
+                        '</div>'
+                    );
+                    row.on('hover:enter', function () {
+                        promptEditField(f.title, sup[f.key], function (newVal) {
+                            sup[f.key] = newVal;
+                            StorageManager.save(state);
+                            renderTopbar();
+                            renderSettings();
+                            showToast('Сохранено.');
+                        });
+                    });
+                    editList.append(row);
+                })(editFields[ef]);
+            }
+            supConfigPanel.append(editList);
+
+            // --- УПРАВЛЕНИЕ СОХРАНЁННЫМИ ДАННЫМИ ---
             var resetPanel = $('<div class="ck-panel"><div class="ck-panel-title">Управление сохранёнными данными</div><div class="ck-actions"></div></div>');
 
             var resetTasteBtn = $('<div class="ck-btn ck-btn--danger selector">Сбросить профиль вкусов</div>');
@@ -4294,10 +4168,9 @@
 
             resetPanel.find('.ck-actions').append(resetTasteBtn).append(resetHistBtn);
 
-            view.append(panel).append(resetPanel);
+            view.append(panel).append(supConfigPanel).append(resetPanel);
             body.empty().append(view);
 
-            // Фокус на первый доступный элемент в настройках
             var firstBodyEl = body.find('.selector').first();
             refreshFocus(firstBodyEl.length ? firstBodyEl : topbar.find('.is-active'));
         }
@@ -4330,7 +4203,6 @@
             shell.append(bgStage).append(scroll.render());
             $('body').append(toastEl);
 
-            // Поддержка прокрутки колёсиком мыши поверх Lampa.Scroll
             shell.on('wheel.ck', function (e) {
                 var orig = e.originalEvent || e;
                 var delta = orig.deltaY || 0;
