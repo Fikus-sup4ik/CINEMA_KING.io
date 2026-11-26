@@ -7,12 +7,14 @@
 
     var PLUGIN_ID = 'cinema_king';
     var STORAGE_KEY = 'cinema_king_state_v2';
-    var STYLE_ID = 'cinema-king-styles-responsive-v12';
+    var STYLE_ID = 'cinema-king-styles-responsive-v13';
 
-    // Постоянные HTTPS-ссылки на два оригинальных прикреплённых изображения QR-кодов в репозитории GitHub
-    // Не генерируем, не перерисовываем и не изменяем содержимое QR-кодов
-    var DEFAULT_QR_CODE_1_URL = 'https://raw.githubusercontent.com/ANDRPRODPAY/cinema-king/main/qr-code-1.jpg';
-    var DEFAULT_QR_CODE_2_URL = 'https://raw.githubusercontent.com/ANDRPRODPAY/cinema-king/main/qr-code-2.jpg';
+    // Постоянные данные автора и ссылки на два оригинальных прикреплённых изображения QR-кодов в GitHub
+    var AUTHOR_CARD_NUMBER = '4441111054843507';
+    var AUTHOR_MONOBANK_URL = 'https://send.monobank.ua/7svuxTzQsS';
+    var AUTHOR_LAMP_TURNKEY_URL = '';
+    var QR_CODE_MONOBANK_URL = 'https://raw.githubusercontent.com/ANDRPRODPAY/cinema-king/main/qr-monobank.jpg';
+    var QR_CODE_TELEGRAM_URL = 'https://raw.githubusercontent.com/ANDRPRODPAY/cinema-king/main/qr-telegram.jpg';
 
     var GENRES_MAP = {
         28: 'Боевик',
@@ -370,15 +372,9 @@
                 bestScore: 0,
                 gamesPlayed: 0
             },
-            support: {
-                cardNumber: '4441111054843507',
-                monobankUrl: 'https://send.monobank.ua/7svuxTzQsS',
-                qrCode1Url: DEFAULT_QR_CODE_1_URL,
-                qrCode2Url: DEFAULT_QR_CODE_2_URL,
-                serviceLampaUrl: '',
-                signatureEnabled: true,
-                signatureText: 'При підтримці ANDRPROD',
-                signaturePosition: 'bottom'
+            signature: {
+                enabled: true,
+                text: 'При підтримці ANDRPROD'
             }
         };
     }
@@ -505,31 +501,12 @@
                     def.quiz.bestScore = Math.max(0, parseInt(raw.quiz.bestScore, 10) || 0);
                     def.quiz.gamesPlayed = Math.max(0, parseInt(raw.quiz.gamesPlayed, 10) || 0);
                 }
-                if (raw.support && typeof raw.support === 'object') {
-                    if (typeof raw.support.cardNumber === 'string' && raw.support.cardNumber) {
-                        def.support.cardNumber = raw.support.cardNumber;
-                    }
-                    if (typeof raw.support.monobankUrl === 'string' && raw.support.monobankUrl) {
-                        def.support.monobankUrl = raw.support.monobankUrl;
-                    }
-                    if (typeof raw.support.qrCode1Url === 'string' && raw.support.qrCode1Url) {
-                        def.support.qrCode1Url = raw.support.qrCode1Url;
-                    }
-                    if (typeof raw.support.qrCode2Url === 'string' && raw.support.qrCode2Url) {
-                        def.support.qrCode2Url = raw.support.qrCode2Url;
-                    }
-                    if (typeof raw.support.serviceLampaUrl === 'string') {
-                        def.support.serviceLampaUrl = raw.support.serviceLampaUrl;
-                    }
-                    if (raw.support.signatureEnabled !== undefined) {
-                        def.support.signatureEnabled = !!raw.support.signatureEnabled;
-                    }
-                    if (typeof raw.support.signatureText === 'string') {
-                        def.support.signatureText = raw.support.signatureText;
-                    }
-                    if (['top', 'bottom'].indexOf(raw.support.signaturePosition) !== -1) {
-                        def.support.signaturePosition = raw.support.signaturePosition;
-                    }
+                if (raw.signature && typeof raw.signature === 'object') {
+                    if (raw.signature.enabled !== undefined) def.signature.enabled = !!raw.signature.enabled;
+                    if (typeof raw.signature.text === 'string' && raw.signature.text) def.signature.text = raw.signature.text;
+                } else if (raw.support && typeof raw.support === 'object') {
+                    if (raw.support.signatureEnabled !== undefined) def.signature.enabled = !!raw.support.signatureEnabled;
+                    if (typeof raw.support.signatureText === 'string' && raw.support.signatureText) def.signature.text = raw.support.signatureText;
                 }
             } catch (e) {
                 return createDefaultState();
@@ -1276,26 +1253,27 @@
             /* Центрированный контейнер контента с безопасным нижним запасом для полной прокрутки */
             '.ck-content { position: relative; z-index: 2; width: 100%; max-width: min(1760px, 100%); margin: 0 auto; padding: max(1.1em, 2.2vh) max(1.8em, 3.2vw) max(7em, 15vh); }' +
 
-            /* Авторская подпись ANDRPROD */
+            /* Авторская подпись ANDRPROD внизу интерфейса */
             '.ck-signature { display: inline-flex; align-items: center; gap: 0.45em; padding: 0.3em 0.75em; border-radius: 0.45em; background: rgba(15,23,42,0.72); border: 1px solid rgba(59,130,246,0.22); color: #94a3b8; font-size: 0.78em; font-weight: 600; letter-spacing: 0.03em; }' +
             '.ck-signature-dot { width: 0.45em; height: 0.45em; border-radius: 50%; background: #3b82f6; flex-shrink: 0; }' +
             '.ck-signature-footer { margin-top: 2em; padding-top: 1em; border-top: 1px solid rgba(148,163,184,0.12); display: flex; justify-content: flex-end; }' +
 
             /* Навигация */
             '.ck-topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75em; margin-bottom: 1.4em; padding-bottom: 0.85em; border-bottom: 1px solid rgba(148,163,184,0.14); }' +
-            '.ck-brand { display: flex; align-items: center; gap: 0.6em; flex-shrink: 0; }' +
+            '.ck-brand { display: flex; align-items: center; gap: 0.65em; flex-shrink: 0; }' +
             '.ck-brand-mark { width: 2.05em; height: 2.05em; border-radius: 0.55em; background: #1d4ed8; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }' +
             '.ck-brand-title { font-size: 1.18em; font-weight: 800; letter-spacing: 0.04em; color: #ffffff; white-space: nowrap; }' +
+
+            /* Компактная кнопка «Поддержать автора» рядом с логотипом (Electric Cyan / Deep Blue) */
+            '.ck-brand-support { display: inline-flex; align-items: center; justify-content: center; gap: 0.36em; min-height: 2.05em; padding: 0.28em 0.72em; border-radius: 0.5em; background: linear-gradient(135deg, #0284c7 0%, #0369a1 55%, #1d4ed8 100%); border: 1px solid #38bdf8; color: #ffffff; font-size: 0.78em; font-weight: 700; cursor: pointer; white-space: nowrap; box-shadow: 0 0 12px rgba(14, 165, 233, 0.32); transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease; }' +
+            '.ck-brand-support svg { flex-shrink: 0; }' +
+            '.ck-brand-support:hover, .ck-brand-support.focus { transform: scale(1.06); border-color: #bae6fd; box-shadow: 0 0 0 2px #38bdf8, 0 0 18px rgba(14, 165, 233, 0.55); color: #ffffff; }' +
+            '.ck-brand-support.is-active { border-color: #ffffff; box-shadow: 0 0 0 2px #7dd3fc, 0 0 20px rgba(14, 165, 233, 0.6); }' +
+
             '.ck-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 0.36em; }' +
-            '.ck-tab { display: inline-flex; align-items: center; justify-content: center; gap: 0.42em; min-height: 2.45em; padding: 0.42em 0.82em; border-radius: 0.52em; background: rgba(17,24,39,0.78); border: 1px solid rgba(148,163,184,0.16); color: #cbd5e1; font-size: 0.82em; font-weight: 600; cursor: pointer; white-space: nowrap; transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease; }' +
+            '.ck-tab { display: inline-flex; align-items: center; justify-content: center; min-height: 2.45em; padding: 0.42em 0.85em; border-radius: 0.52em; background: rgba(17,24,39,0.78); border: 1px solid rgba(148,163,184,0.16); color: #cbd5e1; font-size: 0.83em; font-weight: 600; cursor: pointer; white-space: nowrap; transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease; }' +
             '.ck-tab.is-active { background: #1d4ed8; border-color: #3b82f6; color: #ffffff; }' +
             '.ck-tab.focus { transform: scale(1.04); border-color: #60a5fa; box-shadow: 0 0 0 2px #3b82f6; color: #ffffff; }' +
-
-            /* Выделенная премиальная кнопка «Поддержать автора» (Electric Cyan / Deep Blue) */
-            '.ck-tab--support { background: linear-gradient(135deg, #0284c7 0%, #0369a1 52%, #1d4ed8 100%); border: 1px solid #38bdf8; color: #ffffff; font-weight: 700; padding: 0.44em 0.98em; box-shadow: 0 0 16px rgba(14, 165, 233, 0.34); }' +
-            '.ck-tab--support svg { flex-shrink: 0; }' +
-            '.ck-tab--support:hover, .ck-tab--support.focus { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 52%, #2563eb 100%); border-color: #7dd3fc; color: #ffffff; transform: scale(1.06); box-shadow: 0 0 0 2px #38bdf8, 0 0 24px rgba(14, 165, 233, 0.58); }' +
-            '.ck-tab--support.is-active { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #1d4ed8 100%); border-color: #bae6fd; box-shadow: 0 0 0 2px #38bdf8, 0 0 22px rgba(14, 165, 233, 0.5); color: #ffffff; }' +
 
             '.ck-view { animation: ckSectionIn 0.28s ease both; width: 100%; }' +
             '@keyframes ckSectionIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }' +
@@ -1321,12 +1299,12 @@
             '.ck-kpi-text { font-size: 0.92em; color: #cbd5e1; line-height: 1.45; margin-top: 0.25em; }' +
 
             /* ===================================================================== */
-            /* ОТДЕЛЬНАЯ СТРАНИЦА «ПОДДЕРЖАТЬ АВТОРА»                                */
+            /* СТРАНИЦА «ПОДДЕРЖАТЬ АВТОРА»                                          */
             /* ===================================================================== */
             '.ck-donate-page { width: 100%; max-width: min(68em, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 1.35em; }' +
-            '.ck-donate-hero { padding: 0.4em 0 0.2em; }' +
+            '.ck-donate-hero { padding: 0.35em 0 0.15em; }' +
             '.ck-donate-title { font-size: clamp(1.75em, 2.8vw, 2.45em); font-weight: 800; line-height: 1.15; color: #ffffff; margin: 0 0 0.4em; }' +
-            '.ck-donate-desc { font-size: clamp(0.95em, 1.08vw, 1.08em); line-height: 1.55; color: #cbd5e1; margin: 0; max-width: 52em; }' +
+            '.ck-donate-desc { font-size: clamp(0.95em, 1.08vw, 1.08em); line-height: 1.55; color: #cbd5e1; margin: 0; max-width: 54em; }' +
 
             /* Блок банковской карты Monobank */
             '.ck-card-box { padding: clamp(1.25em, 2.4vw, 1.8em); border-radius: 0.95em; background: rgba(13,19,31,0.94); border: 1px solid rgba(59,130,246,0.38); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.2em; }' +
@@ -1334,11 +1312,10 @@
             '.ck-card-box-number { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: clamp(1.45em, 2.4vw, 2.15em); font-weight: 900; letter-spacing: 0.1em; color: #ffffff; word-break: break-all; }' +
             '.ck-card-box-actions { display: flex; flex-wrap: wrap; gap: 0.75em; }' +
 
-            /* Сетка из двух оригинальных QR-кодов рядом друг с другом */
+            /* Два оригинальных QR-кода рядом друг с другом (вертикально на смартфонах) */
             '.ck-qr-pair-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1em, 2vw, 1.6em); width: 100%; }' +
             '.ck-qr-slot { display: flex; align-items: center; justify-content: center; padding: clamp(1em, 2vw, 1.5em); border-radius: 0.95em; background: rgba(15,20,30,0.92); border: 1px solid rgba(148,163,184,0.2); min-height: 16em; }' +
-            '.ck-qr-slot img { width: 100%; max-width: 270px; height: auto; max-height: 310px; object-fit: contain; border-radius: 0.75em; display: block; }' +
-            '.ck-qr-missing { text-align: center; font-size: 0.85em; color: #94a3b8; line-height: 1.45; padding: 1em; }' +
+            '.ck-qr-slot img { width: 100%; max-width: 280px; height: auto; max-height: 320px; object-fit: contain; border-radius: 0.75em; display: block; }' +
 
             /* Блок «Хочешь Lampa под ключ?» */
             '.ck-turnkey-box { padding: clamp(1.25em, 2.4vw, 1.8em); border-radius: 0.95em; background: rgba(15,20,30,0.92); border: 1px solid rgba(148,163,184,0.2); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.2em; }' +
@@ -1481,7 +1458,7 @@
 
             /* Панели статистики и настроек */
             '.ck-panel { padding: clamp(1em, 2vw, 1.5em); border-radius: 0.85em; background: rgba(15,20,30,0.9); border: 1px solid rgba(148,163,184,0.15); margin-bottom: 1.15em; width: 100%; }' +
-            '.ck-panel-title { font-size: 1.12em; font-weight: 800; color: #ffffff; margin: 0 0 0.35em; }' +
+            '.ck-panel-title { font-size: 1.12em; font-weight: 800; color: #ffffff; margin: 0 0 0.9em; }' +
             '.ck-bar-row { margin-bottom: 0.78em; }' +
             '.ck-bar-head { display: flex; justify-content: space-between; font-size: 0.88em; margin-bottom: 0.3em; color: #e2e8f0; }' +
             '.ck-bar-track { height: 0.56em; border-radius: 999px; background: rgba(30,41,59,0.9); overflow: hidden; }' +
@@ -1498,11 +1475,10 @@
             '.ck-chip.is-excluded { background: rgba(153,27,27,0.75); border-color: #f87171; color: #fee2e2; text-decoration: line-through; }' +
             '.ck-chip.focus { transform: scale(1.04); box-shadow: 0 0 0 2px #3b82f6; color: #ffffff; }' +
 
-            '.ck-edit-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(21em, 1fr)); gap: 0.65em; width: 100%; }' +
-            '.ck-edit-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75em; padding: 0.65em 0.9em; border-radius: 0.6em; background: rgba(17,24,39,0.85); border: 1px solid rgba(148,163,184,0.2); cursor: pointer; min-width: 0; transition: border-color 0.15s ease, transform 0.15s ease; }' +
-            '.ck-edit-row.focus { border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f6; transform: scale(1.015); }' +
+            '.ck-edit-row { display: inline-flex; align-items: center; justify-content: space-between; gap: 0.75em; min-height: 2.45em; padding: 0.48em 0.95em; border-radius: 0.55em; background: rgba(17,24,39,0.85); border: 1px solid rgba(148,163,184,0.22); cursor: pointer; transition: border-color 0.15s ease, transform 0.15s ease; }' +
+            '.ck-edit-row.focus { border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f6; transform: scale(1.02); }' +
             '.ck-edit-key { font-size: 0.84em; font-weight: 700; color: #e2e8f0; }' +
-            '.ck-edit-val { font-size: 0.82em; color: #93c5fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 14em; }' +
+            '.ck-edit-val { font-size: 0.82em; color: #93c5fd; max-width: 16em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }' +
 
             '.ck-hof-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(16em, 1fr)); gap: 0.75em; }' +
             '.ck-hof-item { display: flex; align-items: center; gap: 0.8em; padding: 0.75em 0.9em; border-radius: 0.75em; background: rgba(17,24,39,0.88); border: 1px solid rgba(234,179,8,0.28); cursor: pointer; min-width: 0; }' +
@@ -1560,6 +1536,7 @@
                 '.ck-root { font-size: 14px; }' +
                 '.ck-content { padding: 0.8em 0.95em 5.5em; }' +
                 '.ck-topbar { flex-direction: column; align-items: stretch; gap: 0.65em; margin-bottom: 1em; }' +
+                '.ck-brand { flex-wrap: wrap; }' +
                 '.ck-nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 0.25em; scrollbar-width: none; }' +
                 '.ck-nav::-webkit-scrollbar { display: none; }' +
                 '.ck-tab { flex-shrink: 0; min-height: 2.7em; padding: 0.5em 0.95em; font-size: 0.88em; }' +
@@ -1583,7 +1560,6 @@
                 '.ck-quiz-frame-box { height: clamp(10.5em, 28dvh, 14em); margin-bottom: 0.55em; }' +
                 '.ck-quiz-options { grid-template-columns: 1fr; gap: 0.45em; }' +
                 '.ck-quiz-opt { min-height: 2.55em; padding: 0.52em 0.85em; font-size: 0.9em; }' +
-                '.ck-edit-list { grid-template-columns: 1fr; }' +
                 '.ck-bg-caption { display: none; }' +
             '}' +
 
@@ -1778,19 +1754,14 @@
         // ---------------------------------------------------------------------
 
         function renderSignature() {
-            var sup = state.support;
+            var sig = state.signature;
             footerSig.empty().hide();
 
-            if (!sup || !sup.signatureEnabled || !sup.signatureText) return;
+            if (!sig || !sig.enabled || !sig.text) return;
             if (activeTab === 'roulette' && state.roulette.streamMode) return;
 
-            var badge = $('<div class="ck-signature"><span class="ck-signature-dot"></span><span>' + esc(sup.signatureText) + '</span></div>');
-
-            if (sup.signaturePosition === 'top') {
-                topbar.find('.ck-brand').append(badge);
-            } else {
-                footerSig.append(badge).show();
-            }
+            var badge = $('<div class="ck-signature"><span class="ck-signature-dot"></span><span>' + esc(sig.text) + '</span></div>');
+            footerSig.append(badge).show();
         }
 
         function renderTopbar() {
@@ -1804,22 +1775,32 @@
                 { id: 'recs', label: 'Рекомендации' },
                 { id: 'winners', label: 'Мои победители' },
                 { id: 'taste', label: 'Мой вкус' },
-                { id: 'support', label: 'Поддержать автора', isSupport: true },
                 { id: 'settings', label: 'Настройки' }
             ];
 
             var crownSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 18h20L20 7l-5 4-3-6-3 6-5-4-2 11z"/></svg>';
-            var heartSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+            var heartSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="#ffffff" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
 
             topbar.empty();
-            var brand = $('<div class="ck-brand"><div class="ck-brand-mark">' + crownSvg + '</div><div class="ck-brand-title">CINEMA KING</div></div>');
-            var nav = $('<div class="ck-nav"></div>');
 
+            var supportBadgeBtn = $('<div class="ck-brand-support selector' + (activeTab === 'support' ? ' is-active' : '') + '">' + heartSvg + '<span>Поддержать автора</span></div>');
+            supportBadgeBtn.on('hover:enter', function () {
+                switchTab('support');
+            });
+
+            var brand = $(
+                '<div class="ck-brand">' +
+                    '<div class="ck-brand-mark">' + crownSvg + '</div>' +
+                    '<div class="ck-brand-title">CINEMA KING</div>' +
+                '</div>'
+            );
+            brand.append(supportBadgeBtn);
+
+            var nav = $('<div class="ck-nav"></div>');
             for (var i = 0; i < tabs.length; i++) {
                 (function (tab) {
-                    var cls = 'ck-tab selector' + (tab.isSupport ? ' ck-tab--support' : '') + (activeTab === tab.id ? ' is-active' : '');
-                    var innerHtml = tab.isSupport ? (heartSvg + '<span>' + esc(tab.label) + '</span>') : esc(tab.label);
-                    var btn = $('<div class="' + cls + '">' + innerHtml + '</div>');
+                    var cls = 'ck-tab selector' + (activeTab === tab.id ? ' is-active' : '');
+                    var btn = $('<div class="' + cls + '">' + esc(tab.label) + '</div>');
                     btn.on('hover:enter', function () {
                         switchTab(tab.id);
                     });
@@ -3888,11 +3869,10 @@
         }
 
         // ---------------------------------------------------------------------
-        // 10. ОТДЕЛЬНАЯ СТРАНИЦА «ПОДДЕРЖАТЬ АВТОРА» (В ГЛАВНОЙ НАВИГАЦИИ)
+        // 10. СТРАНИЦА «ПОДДЕРЖАТЬ АВТОРА»
         // ---------------------------------------------------------------------
 
         function renderSupport() {
-            var sup = state.support;
             var view = $('<div class="ck-view"></div>');
             var page = $('<div class="ck-donate-page"></div>');
 
@@ -3909,7 +3889,7 @@
                 '<div class="ck-card-box">' +
                     '<div>' +
                         '<div class="ck-card-box-label">Моя карта Monobank</div>' +
-                        '<div class="ck-card-box-number">' + esc(formatCardNumber(sup.cardNumber)) + '</div>' +
+                        '<div class="ck-card-box-number">' + esc(formatCardNumber(AUTHOR_CARD_NUMBER)) + '</div>' +
                     '</div>' +
                     '<div class="ck-card-box-actions"></div>' +
                 '</div>'
@@ -3917,14 +3897,14 @@
 
             var copyBtn = $('<div class="ck-btn ck-btn--primary selector">Скопировать номер карты</div>');
             copyBtn.on('hover:enter', function () {
-                copyTextToClipboard(sup.cardNumber, function () {
-                    showToast('Номер карты скопирован: ' + formatCardNumber(sup.cardNumber));
+                copyTextToClipboard(AUTHOR_CARD_NUMBER, function () {
+                    showToast('Номер карты скопирован: ' + formatCardNumber(AUTHOR_CARD_NUMBER));
                 });
             });
 
             var monoBtn = $('<div class="ck-btn ck-btn--secondary selector">Перейти в Monobank</div>');
             monoBtn.on('hover:enter', function () {
-                openExternalUrl(sup.monobankUrl, showToast);
+                openExternalUrl(AUTHOR_MONOBANK_URL, showToast);
             });
 
             cardBox.find('.ck-card-box-actions').append(copyBtn).append(monoBtn);
@@ -3932,18 +3912,18 @@
 
             // 3. Два оригинальных прикреплённых QR-кода рядом друг с другом (вертикально на смартфонах)
             var qrPair = $('<div class="ck-qr-pair-grid"></div>');
-            var qrUrls = [sup.qrCode1Url, sup.qrCode2Url];
+            var qrSources = [
+                { url: QR_CODE_MONOBANK_URL, alt: 'QR-код Monobank' },
+                { url: QR_CODE_TELEGRAM_URL, alt: 'QR-код Telegram @ANDRPRODPAY' }
+            ];
 
-            for (var q = 0; q < qrUrls.length; q++) {
-                (function (imgUrl, idx) {
-                    var slot = $('<div class="ck-qr-slot"></div>');
-                    var img = $('<img src="' + esc(imgUrl) + '" alt="QR-код ' + (idx + 1) + '">');
-                    img.on('error', function () {
-                        $(this).replaceWith('<div class="ck-qr-missing">Не удалось загрузить QR-код.<br>Проверьте HTTPS-ссылку на изображение в настройках.</div>');
-                    });
-                    slot.append(img);
-                    qrPair.append(slot);
-                })(qrUrls[q], q);
+            for (var q = 0; q < qrSources.length; q++) {
+                var item = qrSources[q];
+                qrPair.append(
+                    '<div class="ck-qr-slot">' +
+                        '<img src="' + esc(item.url) + '" alt="' + esc(item.alt) + '">' +
+                    '</div>'
+                );
             }
             page.append(qrPair);
 
@@ -3952,17 +3932,17 @@
                 '<div class="ck-turnkey-box">' +
                     '<div>' +
                         '<h2 class="ck-turnkey-title">Хочешь Lampa под ключ?</h2>' +
-                        '<p class="ck-turnkey-desc">Можно заказать полностью настроенную Lampa, приобрести готовый аккаунт или получить помощь с установкой и настройкой.</p>' +
+                        '<p class="ck-turnkey-desc">Можно заказать полностью настроенную Lampa, приобрести готовый настроенный аккаунт или получить помощь с установкой и настройкой.</p>' +
                     '</div>' +
                 '</div>'
             );
 
             var turnkeyBtn = $('<div class="ck-btn ck-btn--primary selector">Заказать Lampa под ключ</div>');
             turnkeyBtn.on('hover:enter', function () {
-                if (sup.serviceLampaUrl && String(sup.serviceLampaUrl).trim()) {
-                    openExternalUrl(sup.serviceLampaUrl, showToast);
+                if (AUTHOR_LAMP_TURNKEY_URL && String(AUTHOR_LAMP_TURNKEY_URL).trim()) {
+                    openExternalUrl(AUTHOR_LAMP_TURNKEY_URL, showToast);
                 } else {
-                    showToast('Укажите ссылку на заказ Lampa под ключ в разделе «Настройки».');
+                    showToast('Ссылка «Заказать Lampa под ключ» ещё не задана.');
                 }
             });
             turnkeyBox.append(turnkeyBtn);
@@ -3974,14 +3954,11 @@
         }
 
         // ---------------------------------------------------------------------
-        // 11. РАЗДЕЛ «НАСТРОЙКИ»
+        // 11. РАЗДЕЛ «НАСТРОЙКИ» (БЕЗ РУЧНЫХ ПОЛЕЙ ДЛЯ QR-КОДОВ И РЕКВИЗИТОВ)
         // ---------------------------------------------------------------------
 
         function renderSettings() {
             var view = $('<div class="ck-view"></div>');
-            var sup = state.support;
-
-            // --- ПАРАМЕТРЫ ИГРЫ И КАТАЛОГА ---
             var panel = $('<div class="ck-panel"><div class="ck-panel-title">Параметры игры и каталога</div></div>');
 
             function invalidatePools() {
@@ -4081,71 +4058,17 @@
             perfGroup.find('.ck-chips').append(liteChip);
             panel.append(perfGroup);
 
-            // --- НАСТРОЙКИ РАЗДЕЛА «ПОДДЕРЖАТЬ АВТОРА» И ПОДПИСИ ---
-            var supConfigPanel = $('<div class="ck-panel"><div class="ck-panel-title">Настройки раздела «Поддержать автора» и подписи</div></div>');
-
-            var sigGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Авторская подпись («При підтримці ANDRPROD»)</div><div class="ck-chips"></div></div>');
-            var sigEnableChip = $('<div class="ck-chip selector' + (sup.signatureEnabled ? ' is-selected' : '') + '">' + (sup.signatureEnabled ? 'Подпись: ВКЛ' : 'Подпись: ВЫКЛ') + '</div>');
-            sigEnableChip.on('hover:enter', function () {
-                sup.signatureEnabled = !sup.signatureEnabled;
+            var sigGroup = $('<div class="ck-setting-group" style="margin-bottom:0;"><div class="ck-setting-label">Авторская подпись внизу экрана</div><div class="ck-chips"></div></div>');
+            var sigChip = $('<div class="ck-chip selector' + (state.signature.enabled ? ' is-selected' : '') + '">' + (state.signature.enabled ? 'Подпись «При підтримці ANDRPROD»: ВКЛ' : 'Подпись «При підтримці ANDRPROD»: ВЫКЛ') + '</div>');
+            sigChip.on('hover:enter', function () {
+                state.signature.enabled = !state.signature.enabled;
                 StorageManager.save(state);
-                renderTopbar();
+                renderSignature();
                 renderSettings();
             });
+            sigGroup.find('.ck-chips').append(sigChip);
+            panel.append(sigGroup);
 
-            var sigTopChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'top' ? ' is-selected' : '') + '">Расположение: Верх</div>');
-            sigTopChip.on('hover:enter', function () {
-                sup.signaturePosition = 'top';
-                StorageManager.save(state);
-                renderTopbar();
-                renderSettings();
-            });
-
-            var sigBotChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'bottom' ? ' is-selected' : '') + '">Расположение: Низ</div>');
-            sigBotChip.on('hover:enter', function () {
-                sup.signaturePosition = 'bottom';
-                StorageManager.save(state);
-                renderTopbar();
-                renderSettings();
-            });
-
-            sigGroup.find('.ck-chips').append(sigEnableChip).append(sigTopChip).append(sigBotChip);
-            supConfigPanel.append(sigGroup);
-
-            var editFields = [
-                { key: 'cardNumber', title: 'Номер карты Monobank' },
-                { key: 'monobankUrl', title: 'Ссылка Monobank' },
-                { key: 'serviceLampaUrl', title: 'Ссылка: Заказать Lampa под ключ' },
-                { key: 'qrCode1Url', title: 'HTTPS-ссылка на QR-код №1' },
-                { key: 'qrCode2Url', title: 'HTTPS-ссылка на QR-код №2' },
-                { key: 'signatureText', title: 'Текст авторской подписи' }
-            ];
-
-            var editList = $('<div class="ck-edit-list"></div>');
-            for (var ef = 0; ef < editFields.length; ef++) {
-                (function (f) {
-                    var valDisplay = sup[f.key] ? String(sup[f.key]) : 'Не указано';
-                    var row = $(
-                        '<div class="ck-edit-row selector">' +
-                            '<span class="ck-edit-key">' + esc(f.title) + '</span>' +
-                            '<span class="ck-edit-val">' + esc(valDisplay) + '</span>' +
-                        '</div>'
-                    );
-                    row.on('hover:enter', function () {
-                        promptEditField(f.title, sup[f.key], function (newVal) {
-                            sup[f.key] = newVal;
-                            StorageManager.save(state);
-                            renderTopbar();
-                            renderSettings();
-                            showToast('Сохранено.');
-                        });
-                    });
-                    editList.append(row);
-                })(editFields[ef]);
-            }
-            supConfigPanel.append(editList);
-
-            // --- УПРАВЛЕНИЕ СОХРАНЁННЫМИ ДАННЫМИ ---
             var resetPanel = $('<div class="ck-panel"><div class="ck-panel-title">Управление сохранёнными данными</div><div class="ck-actions"></div></div>');
 
             var resetTasteBtn = $('<div class="ck-btn ck-btn--danger selector">Сбросить профиль вкусов</div>');
@@ -4175,7 +4098,7 @@
 
             resetPanel.find('.ck-actions').append(resetTasteBtn).append(resetHistBtn);
 
-            view.append(panel).append(supConfigPanel).append(resetPanel);
+            view.append(panel).append(resetPanel);
             body.empty().append(view);
 
             var firstBodyEl = body.find('.selector').first();
