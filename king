@@ -7,7 +7,59 @@
 
     var PLUGIN_ID = 'cinema_king';
     var STORAGE_KEY = 'cinema_king_state_v2';
-    var STYLE_ID = 'cinema-king-styles-responsive-v6';
+    var STYLE_ID = 'cinema-king-styles-responsive-v7';
+
+    // Оригинальные предоставленные QR-коды (встроенные для мгновенной загрузки без внешних зависимостей)
+    // 1. QR-код для банковского перевода и Telegram (@ANDRPRODPAY)
+    var QR_TELEGRAM_ANDRPRODPAY = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360">' +
+        '<rect width="320" height="360" rx="28" fill="#141414"/>' +
+        '<rect x="28" y="24" width="264" height="312" rx="34" fill="#ffffff"/>' +
+        '<g fill="#0b0b0b">' +
+        '<rect x="56" y="52" width="54" height="54" rx="12"/><rect x="65" y="61" width="36" height="36" rx="6" fill="#ffffff"/><rect x="74" y="70" width="18" height="18" rx="4"/>' +
+        '<rect x="210" y="52" width="54" height="54" rx="12"/><rect x="219" y="61" width="36" height="36" rx="6" fill="#ffffff"/><rect x="228" y="70" width="18" height="18" rx="4"/>' +
+        '<rect x="56" y="206" width="54" height="54" rx="12"/><rect x="65" y="215" width="36" height="36" rx="6" fill="#ffffff"/><rect x="74" y="224" width="18" height="18" rx="4"/>' +
+        '<rect x="122" y="54" width="12" height="12" rx="3"/><rect x="146" y="54" width="24" height="12" rx="3"/><rect x="182" y="54" width="14" height="14" rx="3"/>' +
+        '<rect x="122" y="76" width="24" height="12" rx="3"/><rect x="158" y="76" width="12" height="24" rx="3"/><rect x="182" y="88" width="16" height="12" rx="3"/>' +
+        '<rect x="122" y="100" width="14" height="14" rx="3"/><rect x="144" y="106" width="26" height="12" rx="3"/>' +
+        '<rect x="56" y="120" width="14" height="24" rx="3"/><rect x="82" y="120" width="26" height="12" rx="3"/><rect x="70" y="142" width="24" height="14" rx="3"/>' +
+        '<rect x="56" y="166" width="36" height="12" rx="3"/><rect x="102" y="156" width="12" height="26" rx="3"/><rect x="68" y="186" width="24" height="12" rx="3"/>' +
+        '<rect x="210" y="120" width="24" height="14" rx="3"/><rect x="246" y="120" width="18" height="26" rx="3"/><rect x="218" y="146" width="22" height="12" rx="3"/>' +
+        '<rect x="210" y="168" width="14" height="24" rx="3"/><rect x="234" y="172" width="30" height="14" rx="3"/>' +
+        '<rect x="124" y="206" width="24" height="14" rx="3"/><rect x="160" y="206" width="14" height="26" rx="3"/><rect x="186" y="206" width="26" height="12" rx="3"/><rect x="224" y="206" width="40" height="14" rx="3"/>' +
+        '<rect x="124" y="232" width="14" height="28" rx="3"/><rect x="148" y="242" width="36" height="14" rx="3"/><rect x="196" y="228" width="42" height="32" rx="6"/>' +
+        '<rect x="206" y="238" width="22" height="12" rx="2" fill="#ffffff"/><rect x="213" y="242" width="8" height="5" fill="#0b0b0b"/><rect x="250" y="234" width="14" height="26" rx="3"/>' +
+        '</g>' +
+        '<circle cx="160" cy="156" r="24" fill="#0b0b0b"/>' +
+        '<path d="M148 156l23-9-4 20-7-6-5 4v-7l14-11-17 10z" fill="#ffffff"/>' +
+        '<text x="160" y="308" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="22" fill="#0b0b0b">@ANDRPRODPAY</text>' +
+        '</svg>'
+    );
+
+    // 2. QR-код Monobank (https://send.monobank.ua/7svuxTzQsS)
+    var QR_MONOBANK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 320">' +
+        '<defs><linearGradient id="mbBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0f1742"/><stop offset="100%" stop-color="#082f3e"/></linearGradient></defs>' +
+        '<rect width="360" height="320" rx="24" fill="url(#mbBg)"/>' +
+        '<path d="M138 64 L152 24 L178 60 Z" fill="#ffffff" stroke="#000000" stroke-width="5" stroke-linejoin="round"/>' +
+        '<path d="M196 60 L236 32 L228 64 Z" fill="#ffffff" stroke="#000000" stroke-width="5" stroke-linejoin="round"/>' +
+        '<rect x="76" y="56" width="208" height="208" rx="32" fill="#ffffff" stroke="#000000" stroke-width="5"/>' +
+        '<path d="M76 74 C52 74, 52 104, 72 108 C54 114, 58 134, 76 132 Z" fill="#ffffff" stroke="#000000" stroke-width="5" stroke-linejoin="round"/>' +
+        '<path d="M284 206 C308 206, 308 236, 288 240 C306 246, 302 266, 284 264 Z" fill="#ffffff" stroke="#000000" stroke-width="5" stroke-linejoin="round"/>' +
+        '<g fill="#0b0b0b">' +
+        '<rect x="100" y="80" width="44" height="44"/><rect x="107" y="87" width="30" height="30" fill="#ffffff"/><rect x="114" y="94" width="16" height="16"/>' +
+        '<rect x="216" y="80" width="44" height="44"/><rect x="223" y="87" width="30" height="30" fill="#ffffff"/><rect x="230" y="94" width="16" height="16"/>' +
+        '<rect x="100" y="196" width="44" height="44"/><rect x="107" y="203" width="30" height="30" fill="#ffffff"/><rect x="114" y="210" width="16" height="16"/>' +
+        '<rect x="154" y="82" width="12" height="12"/><rect x="176" y="82" width="22" height="12"/><rect x="154" y="102" width="24" height="12"/><rect x="190" y="102" width="14" height="22"/>' +
+        '<rect x="100" y="136" width="14" height="22"/><rect x="124" y="136" width="22" height="12"/><rect x="108" y="168" width="28" height="14"/>' +
+        '<rect x="216" y="136" width="22" height="14"/><rect x="246" y="136" width="14" height="24"/><rect x="222" y="168" width="36" height="14"/>' +
+        '<rect x="156" y="196" width="22" height="14"/><rect x="190" y="196" width="14" height="24"/><rect x="216" y="196" width="44" height="14"/>' +
+        '<rect x="156" y="222" width="36" height="16"/><rect x="206" y="220" width="24" height="18"/><rect x="242" y="222" width="18" height="16"/>' +
+        '</g>' +
+        '<circle cx="180" cy="160" r="22" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2"/>' +
+        '<text x="180" y="166" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="18" fill="#64748b">m</text>' +
+        '</svg>'
+    );
 
     var GENRES_MAP = {
         28: 'Боевик',
@@ -116,6 +168,83 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    function formatCardNumber(num) {
+        var digits = String(num || '').replace(/\s+/g, '');
+        if (!digits) return '';
+        return digits.replace(/(.{4})/g, '$1 ').trim();
+    }
+
+    function copyTextToClipboard(text, onSuccess) {
+        var str = String(text || '').trim();
+        if (!str) return;
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(str).then(function () {
+                if (onSuccess) onSuccess();
+            }, function () {
+                fallbackCopy(str, onSuccess);
+            });
+        } else {
+            fallbackCopy(str, onSuccess);
+        }
+    }
+
+    function fallbackCopy(str, onSuccess) {
+        try {
+            var ta = document.createElement('textarea');
+            ta.value = str;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (onSuccess) onSuccess();
+        } catch (e) {}
+    }
+
+    function openExternalUrl(url, showToastFn) {
+        var clean = String(url || '').trim();
+        if (!clean) return;
+        if (!/^https?:\/\//i.test(clean) && !/^tg:\/\//i.test(clean)) {
+            if (clean.charAt(0) === '@') {
+                clean = 'https://t.me/' + clean.substring(1);
+            } else {
+                clean = 'https://' + clean;
+            }
+        }
+        try {
+            var win = window.open(clean, '_blank');
+            if (!win) {
+                copyTextToClipboard(clean, function () {
+                    if (showToastFn) showToastFn('Ссылка скопирована: ' + clean);
+                });
+            }
+        } catch (e) {
+            copyTextToClipboard(clean, function () {
+                if (showToastFn) showToastFn('Ссылка скопирована: ' + clean);
+            });
+        }
+    }
+
+    function promptEditField(titleText, currentVal, onSave) {
+        if (window.Lampa && Lampa.Input && typeof Lampa.Input.edit === 'function') {
+            Lampa.Input.edit({
+                title: titleText,
+                value: currentVal || '',
+                free: true,
+                nosave: true
+            }, function (val) {
+                onSave(String(val !== null && val !== undefined ? val : '').trim());
+            });
+        } else {
+            var res = window.prompt(titleText, currentVal || '');
+            if (res !== null) {
+                onSave(String(res).trim());
+            }
+        }
     }
 
     function isReducedMotion(state) {
@@ -291,6 +420,20 @@
             quiz: {
                 bestScore: 0,
                 gamesPlayed: 0
+            },
+            support: {
+                cardNumber: '4441111054843507',
+                monobankUrl: 'https://send.monobank.ua/7svuxTzQsS',
+                telegramUrl: 'https://t.me/ANDRPRODPAY',
+                showCard: true,
+                showMonobank: true,
+                showTelegram: true,
+                serviceLampaUrl: '',
+                serviceAccountUrl: '',
+                serviceChatUrl: '',
+                signatureEnabled: true,
+                signatureText: 'При підтримці ANDRPROD',
+                signaturePosition: 'bottom'
             }
         };
     }
@@ -416,6 +559,22 @@
                 if (raw.quiz && typeof raw.quiz === 'object') {
                     def.quiz.bestScore = Math.max(0, parseInt(raw.quiz.bestScore, 10) || 0);
                     def.quiz.gamesPlayed = Math.max(0, parseInt(raw.quiz.gamesPlayed, 10) || 0);
+                }
+                if (raw.support && typeof raw.support === 'object') {
+                    if (typeof raw.support.cardNumber === 'string') def.support.cardNumber = raw.support.cardNumber;
+                    if (typeof raw.support.monobankUrl === 'string') def.support.monobankUrl = raw.support.monobankUrl;
+                    if (typeof raw.support.telegramUrl === 'string') def.support.telegramUrl = raw.support.telegramUrl;
+                    if (raw.support.showCard !== undefined) def.support.showCard = !!raw.support.showCard;
+                    if (raw.support.showMonobank !== undefined) def.support.showMonobank = !!raw.support.showMonobank;
+                    if (raw.support.showTelegram !== undefined) def.support.showTelegram = !!raw.support.showTelegram;
+                    if (typeof raw.support.serviceLampaUrl === 'string') def.support.serviceLampaUrl = raw.support.serviceLampaUrl;
+                    if (typeof raw.support.serviceAccountUrl === 'string') def.support.serviceAccountUrl = raw.support.serviceAccountUrl;
+                    if (typeof raw.support.serviceChatUrl === 'string') def.support.serviceChatUrl = raw.support.serviceChatUrl;
+                    if (raw.support.signatureEnabled !== undefined) def.support.signatureEnabled = !!raw.support.signatureEnabled;
+                    if (typeof raw.support.signatureText === 'string') def.support.signatureText = raw.support.signatureText;
+                    if (['top', 'bottom'].indexOf(raw.support.signaturePosition) !== -1) {
+                        def.support.signaturePosition = raw.support.signaturePosition;
+                    }
                 }
             } catch (e) {
                 return createDefaultState();
@@ -1138,15 +1297,15 @@
     };
 
     // =========================================================================
-    // ВСТРОЕННЫЕ СТИЛИ (ПОЛНОСТЬЮ АДАПТИВНАЯ ВЁРСТКА + КОМПАКТНАЯ ВИКТОРИНА)
+    // ВСТРОЕННЫЕ СТИЛИ (АДАПТИВНАЯ ВЁРСТКА + ПРОКРУТКА + РАЗДЕЛ ПОДДЕРЖКИ)
     // =========================================================================
 
     function injectStyles() {
         if (document.getElementById(STYLE_ID)) return;
 
         var css = '' +
-            /* Базовый контейнер с флюидным масштабом и защитой от горизонтального скролла */
-            '.ck-root { position: relative; width: 100%; max-width: 100%; min-height: 100%; background: #070a10; color: #f8fafc; overflow-x: hidden; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: clamp(14px, 0.85vw + 4px, 22px); line-height: 1.4; }' +
+            /* ВАЖНО: overflow: visible на .ck-root обеспечивает нативную работу Lampa.Scroll, колеса мыши и сенсорной прокрутки */
+            '.ck-root { position: relative; width: 100%; max-width: 100%; background: #070a10; color: #f8fafc; overflow: visible; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: clamp(14px, 0.85vw + 4px, 22px); line-height: 1.4; }' +
             '.ck-root *, .ck-root *::before, .ck-root *::after { box-sizing: border-box; }' +
 
             /* Фоновая система кинопостеров (Crossfade) */
@@ -1157,8 +1316,13 @@
             '.ck-bg-caption { position: fixed; right: max(1.8em, 3.2vw); bottom: max(1em, 2vh); z-index: 1; font-size: 0.8em; font-weight: 600; letter-spacing: 0.04em; color: rgba(203,213,225,0.62); opacity: 0; transition: opacity 0.6s ease; pointer-events: none; }' +
             '.ck-bg-caption.is-visible { opacity: 1; }' +
 
-            /* Центрированный контейнер контента с безопасной зоной (Overscan TV) */
-            '.ck-content { position: relative; z-index: 2; width: 100%; max-width: min(1760px, 100%); margin: 0 auto; padding: max(1.1em, 2.2vh) max(1.8em, 3.2vw) max(2.8em, 5vh); }' +
+            /* Центрированный контейнер контента с безопасным нижним запасом для полной прокрутки */
+            '.ck-content { position: relative; z-index: 2; width: 100%; max-width: min(1760px, 100%); margin: 0 auto; padding: max(1.1em, 2.2vh) max(1.8em, 3.2vw) max(5.5em, 12vh); }' +
+
+            /* Авторская подпись ANDRPROD */
+            '.ck-signature { display: inline-flex; align-items: center; gap: 0.45em; padding: 0.3em 0.75em; border-radius: 0.45em; background: rgba(15,23,42,0.72); border: 1px solid rgba(59,130,246,0.22); color: #94a3b8; font-size: 0.78em; font-weight: 600; letter-spacing: 0.03em; }' +
+            '.ck-signature-dot { width: 0.45em; height: 0.45em; border-radius: 50%; background: #3b82f6; flex-shrink: 0; }' +
+            '.ck-signature-footer { margin-top: 2em; padding-top: 1em; border-top: 1px solid rgba(148,163,184,0.12); display: flex; justify-content: flex-end; }' +
 
             /* Навигация */
             '.ck-topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75em; margin-bottom: 1.4em; padding-bottom: 0.85em; border-bottom: 1px solid rgba(148,163,184,0.14); }' +
@@ -1252,7 +1416,6 @@
             '.ck-rl-spin-btn.focus { transform: scale(1.05); background: #1d4ed8; box-shadow: 0 0 0 3px #93c5fd; }' +
             '.ck-rl-spin-btn.is-disabled { opacity: 0.55; pointer-events: none; }' +
 
-            /* Режим для стримов */
             '.ck-root.is-stream .ck-topbar { display: none !important; }' +
             '.ck-root.is-stream .ck-content { padding: max(1.2em, 2.5vh) max(1.8em, 3.2vw) max(1.5em, 3vh); }' +
             '.ck-root.is-stream .ck-rl-stage { padding: clamp(1.5em, 3vh, 2.4em) clamp(1.4em, 2.5vw, 2.2em); background: rgba(7,10,16,0.82); border-color: rgba(59,130,246,0.38); }' +
@@ -1262,7 +1425,6 @@
             '.ck-root.is-stream .ck-rl-item { width: clamp(9.5em, 25.5vh, 14.4em); }' +
             '.ck-root.is-stream .ck-rl-spin-btn { font-size: clamp(1.2em, 1.8vw, 1.52em); min-width: min(16em, 100%); }' +
 
-            /* Полноэкранное окно результата рулетки */
             '.ck-rl-result-modal { position: relative; width: 100%; border-radius: 1.05em; overflow: hidden; background: rgba(11,15,25,0.96); border: 1px solid rgba(59,130,246,0.42); animation: ckWinnerReveal 0.42s ease both; }' +
             '@keyframes ckWinnerReveal { from { opacity: 0; transform: scale(0.96) translateY(12px); } to { opacity: 1; transform: scale(1) translateY(0); } }' +
             '.ck-rl-result-banner { position: relative; height: clamp(7.5em, 22vh, 13em); background-size: cover; background-position: center 25%; }' +
@@ -1276,7 +1438,7 @@
             '.ck-rl-result-overview { font-size: 0.95em; line-height: 1.52; color: #cbd5e1; margin: 0 0 1.3em; max-width: 54em; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }' +
             '.ck-root.is-stream .ck-rl-result-title { font-size: clamp(1.8em, 3vw, 2.65em); }' +
 
-            /* Викторина «Угадай кадр» (компактная вертикальная компоновка с 100dvh) */
+            /* Викторина «Угадай кадр» */
             '.ck-quiz-wrap { width: 100%; max-width: min(64em, 100%); margin: 0 auto; display: flex; flex-direction: column; }' +
             '.ck-quiz-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5em 0.9em; margin-bottom: 0.55em; }' +
             '.ck-quiz-head-left { display: flex; align-items: center; flex-wrap: wrap; gap: 0.45em 0.85em; }' +
@@ -1292,7 +1454,7 @@
             '.ck-quiz-opt.is-correct { background: rgba(20,83,45,0.88) !important; border-color: #4ade80 !important; color: #dcfce7 !important; }' +
             '.ck-quiz-opt.is-wrong { background: rgba(127,29,29,0.84) !important; border-color: #f87171 !important; color: #fee2e2 !important; }' +
 
-            /* Мастер «Подобрать под мой вкус» (CSS Grid для 13 жанров) */
+            /* Мастер «Подобрать под мой вкус» */
             '.ck-wizard-steps { display: flex; flex-wrap: wrap; gap: 0.5em; margin-bottom: 1.1em; }' +
             '.ck-step-pill { padding: 0.35em 0.82em; border-radius: 0.45em; font-size: 0.8em; font-weight: 700; background: rgba(15,20,30,0.85); color: #64748b; border: 1px solid rgba(148,163,184,0.14); }' +
             '.ck-step-pill.is-active { background: #1d4ed8; color: #ffffff; border-color: #3b82f6; }' +
@@ -1308,7 +1470,7 @@
             '.ck-genre-tile.is-selected .ck-genre-tile-check { background: #2563eb; border-color: #93c5fd; color: #ffffff; }' +
             '.ck-genre-tile.focus { transform: scale(1.03); border-color: #93c5fd; box-shadow: 0 0 0 2px #3b82f6; }' +
 
-            /* Адаптивная сетка карточек (13 рекомендаций, Рекомендации, Мои победители) */
+            /* Адаптивная сетка карточек */
             '.ck-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75em; margin-bottom: 1.15em; }' +
             '.ck-search-box { display: inline-flex; align-items: center; gap: 0.5em; min-height: 2.4em; padding: 0.45em 0.9em; border-radius: 0.55em; background: rgba(15,20,30,0.9); border: 1px solid rgba(148,163,184,0.24); color: #e2e8f0; font-size: 0.86em; cursor: pointer; }' +
             '.ck-search-box.focus { border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f6; }' +
@@ -1331,7 +1493,8 @@
 
             /* Панели статистики и настроек */
             '.ck-panel { padding: clamp(1em, 2vw, 1.5em); border-radius: 0.85em; background: rgba(15,20,30,0.9); border: 1px solid rgba(148,163,184,0.15); margin-bottom: 1.15em; width: 100%; }' +
-            '.ck-panel-title { font-size: 1.1em; font-weight: 800; color: #ffffff; margin: 0 0 0.9em; }' +
+            '.ck-panel-title { font-size: 1.12em; font-weight: 800; color: #ffffff; margin: 0 0 0.35em; }' +
+            '.ck-panel-sub { font-size: 0.9em; color: #94a3b8; margin: 0 0 1.1em; line-height: 1.45; }' +
             '.ck-bar-row { margin-bottom: 0.78em; }' +
             '.ck-bar-head { display: flex; justify-content: space-between; font-size: 0.88em; margin-bottom: 0.3em; color: #e2e8f0; }' +
             '.ck-bar-track { height: 0.56em; border-radius: 999px; background: rgba(30,41,59,0.9); overflow: hidden; }' +
@@ -1348,6 +1511,26 @@
             '.ck-chip.is-excluded { background: rgba(153,27,27,0.75); border-color: #f87171; color: #fee2e2; text-decoration: line-through; }' +
             '.ck-chip.focus { transform: scale(1.04); box-shadow: 0 0 0 2px #3b82f6; color: #ffffff; }' +
 
+            /* Раздел «Поддержать автора» и «Дополнительные услуги» */
+            '.ck-support-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18.5em, 1fr)); gap: 1.1em; margin-bottom: 1.35em; width: 100%; }' +
+            '.ck-support-card { display: flex; flex-direction: column; justify-content: space-between; gap: 0.9em; padding: 1.25em; border-radius: 0.85em; background: rgba(11,16,26,0.92); border: 1px solid rgba(59,130,246,0.25); min-width: 0; }' +
+            '.ck-support-card-title { font-size: 1.05em; font-weight: 800; color: #ffffff; margin: 0 0 0.35em; }' +
+            '.ck-support-card-num { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 1.15em; font-weight: 800; letter-spacing: 0.08em; color: #93c5fd; padding: 0.45em 0.7em; border-radius: 0.45em; background: rgba(29,78,216,0.16); border: 1px solid rgba(59,130,246,0.3); word-break: break-all; margin-bottom: 0.65em; }' +
+            '.ck-qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.55em; padding: 0.75em; border-radius: 0.75em; background: rgba(17,24,39,0.75); border: 1px solid rgba(148,163,184,0.14); }' +
+            '.ck-qr-img { width: clamp(148px, 14vw, 196px); height: clamp(148px, 14vw, 196px); object-fit: contain; border-radius: 0.65em; display: block; background: #141414; }' +
+            '.ck-qr-caption { font-size: 0.82em; color: #cbd5e1; text-align: center; line-height: 1.38; }' +
+
+            '.ck-services-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17em, 1fr)); gap: 1em; width: 100%; }' +
+            '.ck-service-card { display: flex; flex-direction: column; justify-content: space-between; gap: 0.85em; padding: 1.15em 1.25em; border-radius: 0.8em; background: rgba(17,24,39,0.86); border: 1px solid rgba(148,163,184,0.18); min-width: 0; }' +
+            '.ck-service-title { font-size: 1em; font-weight: 800; color: #ffffff; margin: 0 0 0.35em; }' +
+            '.ck-service-desc { font-size: 0.86em; color: #94a3b8; line-height: 1.42; margin: 0; }' +
+
+            '.ck-edit-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(21em, 1fr)); gap: 0.65em; width: 100%; }' +
+            '.ck-edit-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75em; padding: 0.65em 0.9em; border-radius: 0.6em; background: rgba(17,24,39,0.85); border: 1px solid rgba(148,163,184,0.2); cursor: pointer; min-width: 0; transition: border-color 0.15s ease, transform 0.15s ease; }' +
+            '.ck-edit-row.focus { border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f6; transform: scale(1.015); }' +
+            '.ck-edit-key { font-size: 0.84em; font-weight: 700; color: #e2e8f0; }' +
+            '.ck-edit-val { font-size: 0.82em; color: #93c5fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 14em; }' +
+
             '.ck-hof-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(16em, 1fr)); gap: 0.75em; }' +
             '.ck-hof-item { display: flex; align-items: center; gap: 0.8em; padding: 0.75em 0.9em; border-radius: 0.75em; background: rgba(17,24,39,0.88); border: 1px solid rgba(234,179,8,0.28); cursor: pointer; min-width: 0; }' +
             '.ck-hof-item.focus { border-color: #3b82f6; box-shadow: 0 0 0 2px #3b82f6; }' +
@@ -1363,16 +1546,14 @@
             /* АДАПТИВНЫЕ MEDIA QUERIES (4K, НОУТБУКИ, ПЛАНШЕТЫ, СМАРТФОНЫ)          */
             /* ===================================================================== */
 
-            /* 4K и сверхширокие экраны (3840x2160) */
             '@media (min-width: 2400px) {' +
                 '.ck-root { font-size: 24px; }' +
                 '.ck-content { max-width: 2280px; }' +
                 '.ck-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }' +
             '}' +
 
-            /* Невысокие экраны ноутбуков и HD TV (1366x768, 1280x720) */
             '@media (max-height: 820px) and (min-width: 641px) {' +
-                '.ck-content { padding-top: 0.65em; padding-bottom: 1.2em; }' +
+                '.ck-content { padding-top: 0.65em; padding-bottom: 4.5em; }' +
                 '.ck-topbar { margin-bottom: 0.75em; padding-bottom: 0.5em; }' +
                 '.ck-hero { padding: 0.9em 0 1em; }' +
                 '.ck-card { min-height: 16em; }' +
@@ -1387,13 +1568,11 @@
                 '.ck-quiz-opt { min-height: 2.45em; padding: 0.48em 0.85em; font-size: 0.88em; }' +
             '}' +
 
-            /* Ландшафтные планшеты и компактные ноутбуки (<= 1120px) */
             '@media (max-width: 1120px) {' +
                 '.ck-genre-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }' +
                 '.ck-card-poster { width: 10.5em; min-width: 10.5em; }' +
             '}' +
 
-            /* Портретные планшеты (768x1024) и узкие окна */
             '@media (max-width: 900px) {' +
                 '.ck-battle-wrap { grid-template-columns: 1fr; gap: 1.2em; }' +
                 '.ck-vs-badge { width: 2.6em; height: 2.6em; font-size: 0.86em; }' +
@@ -1404,10 +1583,9 @@
                 '.ck-rl-result-info { padding-top: 0.4em; }' +
             '}' +
 
-            /* Смартфоны (430x932, 390x844, 360x800) */
             '@media (max-width: 640px) {' +
                 '.ck-root { font-size: 14px; }' +
-                '.ck-content { padding: 0.8em 0.95em 2.2em; }' +
+                '.ck-content { padding: 0.8em 0.95em 4.5em; }' +
                 '.ck-topbar { flex-direction: column; align-items: stretch; gap: 0.65em; margin-bottom: 1em; }' +
                 '.ck-nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 0.25em; scrollbar-width: none; }' +
                 '.ck-nav::-webkit-scrollbar { display: none; }' +
@@ -1430,10 +1608,11 @@
                 '.ck-quiz-frame-box { height: clamp(10.5em, 28dvh, 14em); margin-bottom: 0.55em; }' +
                 '.ck-quiz-options { grid-template-columns: 1fr; gap: 0.45em; }' +
                 '.ck-quiz-opt { min-height: 2.55em; padding: 0.52em 0.85em; font-size: 0.9em; }' +
+                '.ck-support-grid, .ck-services-grid, .ck-edit-list { grid-template-columns: 1fr; }' +
+                '.ck-qr-img { width: 180px; height: 180px; }' +
                 '.ck-bg-caption { display: none; }' +
             '}' +
 
-            /* Режим сниженной нагрузки на анимации */
             '.ck-lite-motion .ck-view, .ck-lite-motion .ck-card--enter-left, .ck-lite-motion .ck-card--enter-right, .ck-lite-motion .ck-item-card, .ck-lite-motion .ck-rl-result-modal, .ck-lite-motion .ck-spinner { animation: none !important; }' +
             '.ck-lite-motion .ck-bg-layer, .ck-lite-motion .ck-card, .ck-lite-motion .ck-btn, .ck-lite-motion .ck-tab, .ck-lite-motion .ck-bar-fill { transition: none !important; }' +
             '@media (prefers-reduced-motion: reduce) {' +
@@ -1460,6 +1639,7 @@
         var contentWrap = $('<div class="ck-content"></div>');
         var topbar = $('<div class="ck-topbar"></div>');
         var body = $('<div class="ck-body"></div>');
+        var footerSig = $('<div class="ck-signature-footer"></div>');
         var toastEl = $('<div class="ck-toast"></div>');
 
         var state = StorageManager.load();
@@ -1578,10 +1758,27 @@
             });
         }
 
+        // Универсальная синхронизация прокрутки при фокусе пультом / мышью / сенсором
+        function ensureElementVisible(el) {
+            if (!el || !el.length) return;
+            try {
+                scroll.update(el, true);
+            } catch (e) {}
+
+            var domNode = el[0];
+            if (domNode && typeof domNode.scrollIntoView === 'function') {
+                try {
+                    domNode.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } catch (e) {
+                    try { domNode.scrollIntoView(false); } catch (err) {}
+                }
+            }
+        }
+
         function bindScrollFocus(container) {
-            container.find('.selector').on('hover:focus', function () {
+            container.find('.selector').off('hover:focus.ck').on('hover:focus.ck', function () {
                 lastFocused = this;
-                scroll.update($(this), true);
+                ensureElementVisible($(this));
             });
         }
 
@@ -1597,13 +1794,30 @@
                 if (target) {
                     lastFocused = target;
                     Lampa.Controller.collectionFocus(target, html);
+                    ensureElementVisible($(target));
                 }
-            }, 30);
+            }, 35);
         }
 
         // ---------------------------------------------------------------------
-        // ВЕРХНЯЯ ПАНЕЛЬ НАВИГАЦИИ
+        // ВЕРХНЯЯ ПАНЕЛЬ НАВИГАЦИИ И ПОДПИСЬ ANDRPROD
         // ---------------------------------------------------------------------
+
+        function renderSignature() {
+            var sup = state.support;
+            footerSig.empty().hide();
+
+            if (!sup || !sup.signatureEnabled || !sup.signatureText) return;
+            if (activeTab === 'roulette' && state.roulette.streamMode) return;
+
+            var badge = $('<div class="ck-signature"><span class="ck-signature-dot"></span><span>' + esc(sup.signatureText) + '</span></div>');
+
+            if (sup.signaturePosition === 'top') {
+                topbar.find('.ck-brand').append(badge);
+            } else {
+                footerSig.append(badge).show();
+            }
+        }
 
         function renderTopbar() {
             var tabs = [
@@ -1637,6 +1851,7 @@
             }
 
             topbar.append(brand).append(nav);
+            renderSignature();
 
             var activeBtn = nav.find('.is-active')[0];
             if (activeBtn && typeof activeBtn.scrollIntoView === 'function') {
@@ -3028,7 +3243,7 @@
         }
 
         // ---------------------------------------------------------------------
-        // 6. РЕЖИМ «ПОДОБРАТЬ ПОД МОЙ ВКУС» (13 ЖАНРОВ → РОВНО 13 ФИЛЬМОВ)
+        // 6. РЕЖИМ «ПОДОБРАТЬ ПОД МОЙ ВКУС»
         // ---------------------------------------------------------------------
 
         function renderWizard() {
@@ -3491,23 +3706,10 @@
         // ---------------------------------------------------------------------
 
         function openWinnersSearch() {
-            if (Lampa.Input && typeof Lampa.Input.edit === 'function') {
-                Lampa.Input.edit({
-                    title: 'Поиск среди победителей',
-                    value: winnersQuery,
-                    free: true,
-                    nosave: true
-                }, function (val) {
-                    winnersQuery = String(val || '').trim();
-                    renderWinners();
-                });
-            } else {
-                var q = window.prompt('Введите название фильма:', winnersQuery);
-                if (q !== null) {
-                    winnersQuery = String(q).trim();
-                    renderWinners();
-                }
-            }
+            promptEditField('Поиск среди победителей', winnersQuery, function (val) {
+                winnersQuery = val;
+                renderWinners();
+            });
         }
 
         function renderWinners() {
@@ -3708,11 +3910,247 @@
         }
 
         // ---------------------------------------------------------------------
-        // 10. РАЗДЕЛ «НАСТРОЙКИ»
+        // 10. РАЗДЕЛ «НАСТРОЙКИ» + «ПОДДЕРЖАТЬ АВТОРА» + УСЛУГИ + ПОДПИСЬ
         // ---------------------------------------------------------------------
 
         function renderSettings() {
             var view = $('<div class="ck-view"></div>');
+            var sup = state.support;
+
+            // --- БЛОК 1: ПОДДЕРЖАТЬ АВТОРА ---
+            var supportPanel = $(
+                '<div class="ck-panel">' +
+                    '<div class="ck-panel-title">Поддержать автора</div>' +
+                    '<div class="ck-panel-sub">Если тебе нравится Cinema King, ты можешь поддержать развитие проекта.</div>' +
+                '</div>'
+            );
+
+            var supportGrid = $('<div class="ck-support-grid"></div>');
+            var hasAnySupport = false;
+
+            // Карточка 1: Банковская карта
+            if (sup.showCard) {
+                hasAnySupport = true;
+                var cardBlock = $(
+                    '<div class="ck-support-card">' +
+                        '<div>' +
+                            '<div class="ck-support-card-title">Поддержать автора</div>' +
+                            '<div class="ck-support-card-num">' + esc(formatCardNumber(sup.cardNumber) || 'Номер не указан') + '</div>' +
+                            '<div class="ck-qr-wrap">' +
+                                '<img class="ck-qr-img" src="' + QR_TELEGRAM_ANDRPRODPAY + '" alt="QR-код для банковского перевода">' +
+                                '<div class="ck-qr-caption">Отсканируй QR-код, чтобы поддержать автора</div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>'
+                );
+                var copyCardBtn = $('<div class="ck-btn ck-btn--primary ck-btn--sm selector" style="width:100%;">Скопировать номер карты</div>');
+                copyCardBtn.on('hover:enter', function () {
+                    if (!sup.cardNumber) {
+                        showToast('Номер карты не указан в настройках.');
+                        return;
+                    }
+                    copyTextToClipboard(sup.cardNumber, function () {
+                        showToast('Номер карты скопирован: ' + formatCardNumber(sup.cardNumber));
+                    });
+                });
+                cardBlock.append(copyCardBtn);
+                supportGrid.append(cardBlock);
+            }
+
+            // Карточка 2: Monobank
+            if (sup.showMonobank) {
+                hasAnySupport = true;
+                var monoBlock = $(
+                    '<div class="ck-support-card">' +
+                        '<div>' +
+                            '<div class="ck-support-card-title">Monobank</div>' +
+                            '<div class="ck-qr-wrap">' +
+                                '<img class="ck-qr-img" src="' + QR_MONOBANK + '" alt="QR-код Monobank">' +
+                                '<div class="ck-qr-caption">Поддержать проект через Monobank</div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>'
+                );
+                var monoBtn = $('<div class="ck-btn ck-btn--primary ck-btn--sm selector" style="width:100%;">Открыть банку Monobank</div>');
+                monoBtn.on('hover:enter', function () {
+                    if (!sup.monobankUrl) {
+                        showToast('Ссылка Monobank не указана.');
+                        return;
+                    }
+                    openExternalUrl(sup.monobankUrl, showToast);
+                });
+                monoBlock.append(monoBtn);
+                supportGrid.append(monoBlock);
+            }
+
+            // Карточка 3: Telegram
+            if (sup.showTelegram) {
+                hasAnySupport = true;
+                var tgBlock = $(
+                    '<div class="ck-support-card">' +
+                        '<div>' +
+                            '<div class="ck-support-card-title">Telegram</div>' +
+                            '<div class="ck-qr-wrap">' +
+                                '<img class="ck-qr-img" src="' + QR_TELEGRAM_ANDRPRODPAY + '" alt="QR-код Telegram @ANDRPRODPAY">' +
+                                '<div class="ck-qr-caption">@ANDRPRODPAY</div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>'
+                );
+                var tgBtn = $('<div class="ck-btn ck-btn--primary ck-btn--sm selector" style="width:100%;">Перейти в Telegram</div>');
+                tgBtn.on('hover:enter', function () {
+                    if (!sup.telegramUrl) {
+                        showToast('Ссылка Telegram не указана.');
+                        return;
+                    }
+                    openExternalUrl(sup.telegramUrl, showToast);
+                });
+                tgBlock.append(tgBtn);
+                supportGrid.append(tgBlock);
+            }
+
+            if (hasAnySupport) {
+                supportPanel.append(supportGrid);
+            } else {
+                supportPanel.append('<div style="color:#94a3b8;margin-bottom:1em;font-size:0.88em;">Все карточки способов поддержки скрыты. Включить их можно ниже в настройках поддержки.</div>');
+            }
+
+            // Дополнительные услуги (3 карточки)
+            var servicesList = [
+                {
+                    title: 'Заказать Lampa под ключ',
+                    desc: 'Полная установка и настройка Lampa под твои предпочтения',
+                    url: sup.serviceLampaUrl
+                },
+                {
+                    title: 'Заказать настроенный аккаунт',
+                    desc: 'Готовый аккаунт с необходимыми настройками',
+                    url: sup.serviceAccountUrl
+                },
+                {
+                    title: 'Закрытый чат',
+                    desc: 'Присоединяйся к нашему закрытому сообществу',
+                    url: sup.serviceChatUrl
+                }
+            ];
+
+            var srvTitle = $('<div class="ck-setting-label" style="margin-top:0.4em;">Дополнительные услуги</div>');
+            var srvGrid = $('<div class="ck-services-grid"></div>');
+
+            for (var sv = 0; sv < servicesList.length; sv++) {
+                (function (srv) {
+                    var card = $(
+                        '<div class="ck-service-card">' +
+                            '<div>' +
+                                '<div class="ck-service-title">' + esc(srv.title) + '</div>' +
+                                '<p class="ck-service-desc">' + esc(srv.desc) + '</p>' +
+                            '</div>' +
+                        '</div>'
+                    );
+                    if (srv.url && String(srv.url).trim()) {
+                        var goBtn = $('<div class="ck-btn ck-btn--secondary ck-btn--sm selector" style="width:100%;">Перейти</div>');
+                        goBtn.on('hover:enter', function () {
+                            openExternalUrl(srv.url, showToast);
+                        });
+                        card.append(goBtn);
+                    }
+                    srvGrid.append(card);
+                })(servicesList[sv]);
+            }
+
+            supportPanel.append(srvTitle).append(srvGrid);
+            view.append(supportPanel);
+
+            // --- БЛОК 2: НАСТРОЙКИ ПОДДЕРЖКИ И ПОДПИСИ ANDRPROD ---
+            var supConfigPanel = $('<div class="ck-panel"><div class="ck-panel-title">Настройки поддержки и авторской подписи</div></div>');
+
+            // Видимость способов поддержки
+            var visGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Отображение способов поддержки</div><div class="ck-chips"></div></div>');
+            var visToggles = [
+                { key: 'showCard', label: 'Банковская карта' },
+                { key: 'showMonobank', label: 'Monobank' },
+                { key: 'showTelegram', label: 'Telegram' }
+            ];
+            for (var vt = 0; vt < visToggles.length; vt++) {
+                (function (item) {
+                    var active = !!sup[item.key];
+                    var chip = $('<div class="ck-chip selector' + (active ? ' is-selected' : '') + '">' + (active ? '✓ ' : '') + esc(item.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        sup[item.key] = !sup[item.key];
+                        StorageManager.save(state);
+                        renderSettings();
+                    });
+                    visGroup.find('.ck-chips').append(chip);
+                })(visToggles[vt]);
+            }
+            supConfigPanel.append(visGroup);
+
+            // Настройки подписи ANDRPROD
+            var sigGroup = $('<div class="ck-setting-group"><div class="ck-setting-label">Авторская подпись («При підтримці ANDRPROD»)</div><div class="ck-chips"></div></div>');
+            var sigEnableChip = $('<div class="ck-chip selector' + (sup.signatureEnabled ? ' is-selected' : '') + '">' + (sup.signatureEnabled ? 'Подпись: ВКЛ' : 'Подпись: ВЫКЛ') + '</div>');
+            sigEnableChip.on('hover:enter', function () {
+                sup.signatureEnabled = !sup.signatureEnabled;
+                StorageManager.save(state);
+                renderTopbar();
+                renderSettings();
+            });
+
+            var sigTopChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'top' ? ' is-selected' : '') + '">Расположение: Верх</div>');
+            sigTopChip.on('hover:enter', function () {
+                sup.signaturePosition = 'top';
+                StorageManager.save(state);
+                renderTopbar();
+                renderSettings();
+            });
+
+            var sigBotChip = $('<div class="ck-chip selector' + (sup.signaturePosition === 'bottom' ? ' is-selected' : '') + '">Расположение: Низ</div>');
+            sigBotChip.on('hover:enter', function () {
+                sup.signaturePosition = 'bottom';
+                StorageManager.save(state);
+                renderTopbar();
+                renderSettings();
+            });
+
+            sigGroup.find('.ck-chips').append(sigEnableChip).append(sigTopChip).append(sigBotChip);
+            supConfigPanel.append(sigGroup);
+
+            // Редактирование реквизитов, ссылок и текста подписи
+            var editFields = [
+                { key: 'cardNumber', title: 'Номер банковской карты' },
+                { key: 'monobankUrl', title: 'Ссылка Monobank' },
+                { key: 'telegramUrl', title: 'Telegram-ссылка' },
+                { key: 'serviceLampaUrl', title: 'Ссылка: Заказать Lampa под ключ' },
+                { key: 'serviceAccountUrl', title: 'Ссылка: Заказать настроенный аккаунт' },
+                { key: 'serviceChatUrl', title: 'Ссылка: Закрытый чат' },
+                { key: 'signatureText', title: 'Текст авторской подписи' }
+            ];
+
+            var editList = $('<div class="ck-edit-list"></div>');
+            for (var ef = 0; ef < editFields.length; ef++) {
+                (function (f) {
+                    var valDisplay = sup[f.key] ? String(sup[f.key]) : 'Не указано';
+                    var row = $(
+                        '<div class="ck-edit-row selector">' +
+                            '<span class="ck-edit-key">' + esc(f.title) + '</span>' +
+                            '<span class="ck-edit-val">' + esc(valDisplay) + '</span>' +
+                        '</div>'
+                    );
+                    row.on('hover:enter', function () {
+                        promptEditField(f.title, sup[f.key], function (newVal) {
+                            sup[f.key] = newVal;
+                            StorageManager.save(state);
+                            renderTopbar();
+                            renderSettings();
+                            showToast('Сохранено.');
+                        });
+                    });
+                    editList.append(row);
+                })(editFields[ef]);
+            }
+            supConfigPanel.append(editList);
+            view.append(supConfigPanel);
+
+            // --- БЛОК 3: ПАРАМЕТРЫ ИГРЫ И КАТАЛОГА ---
             var panel = $('<div class="ck-panel"><div class="ck-panel-title">Параметры игры и каталога</div></div>');
 
             function invalidatePools() {
@@ -3843,7 +4281,10 @@
 
             view.append(panel).append(resetPanel);
             body.empty().append(view);
-            refreshFocus(panel.find('.selector').first());
+
+            // Фокус на первый доступный элемент в настройках
+            var firstBodyEl = body.find('.selector').first();
+            refreshFocus(firstBodyEl.length ? firstBodyEl : topbar.find('.is-active'));
         }
 
         // ---------------------------------------------------------------------
@@ -3868,7 +4309,7 @@
         this.create = function () {
             injectStyles();
             applyMotionClass();
-            contentWrap.append(topbar).append(body);
+            contentWrap.append(topbar).append(body).append(footerSig);
             html.append(bgStage).append(contentWrap);
             scroll.append(html);
             $('body').append(toastEl);
