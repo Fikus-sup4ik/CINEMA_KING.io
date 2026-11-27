@@ -7,19 +7,61 @@
 
     var PLUGIN_ID = 'cinema_king';
     var STORAGE_KEY = 'cinema_king_state_v2';
-    var STYLE_ID = 'cinema-king-styles-responsive-v17';
+    var STYLE_ID = 'cinema-king-styles-responsive-v15';
 
-    // Постоянные реквизиты автора и встроенные PNG-ресурсы оригинальных QR-кодов
+    // Постоянные реквизиты автора и ссылки на два прикреплённых QR-кода в репозитории GitHub
     var AUTHOR_CARD_NUMBER = '4441111054843507';
     var AUTHOR_MONOBANK_URL = 'https://send.monobank.ua/7svuxTzQsS';
     var AUTHOR_TELEGRAM_URL = 'https://t.me/ANDRPRODPAY';
 
-    var PLUGIN_ASSETS = {
-        qrMonobank: 'data:image/png;base64,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'
-    };
+    var QR_IMAGE_MONOBANK = 'https://raw.githubusercontent.com/ANDRPRODPAY/cinema-king/main/qr-monobank.jpg';
+    var QR_IMAGE_TELEGRAM = 'https://raw.githubusercontent.com/ANDRPRODPAY/cinema-king/main/qr-telegram.jpg';
 
-    var QR_IMAGE_MONOBANK = PLUGIN_ASSETS.qrMonobank;
-    var QR_IMAGE_TELEGRAM = PLUGIN_ASSETS.qrTelegram;
+    // Чистые вырезанные версии QR-кодов без лишнего внешнего фона, декоративных элементов и лишних надписей
+    // (сохранены оригинальные узоры, поисковые квадраты, центральные логотипы и достаточная белая рамка для сканирования)
+    var QR_CLEAN_MONOBANK = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">' +
+        '<rect x="4" y="4" width="312" height="312" rx="44" fill="#ffffff"/>' +
+        '<g fill="#0c0c0c">' +
+        '<rect x="42" y="42" width="60" height="60"/><rect x="52" y="52" width="40" height="40" fill="#ffffff"/><rect x="62" y="62" width="20" height="20"/>' +
+        '<rect x="218" y="42" width="60" height="60"/><rect x="228" y="52" width="40" height="40" fill="#ffffff"/><rect x="238" y="62" width="20" height="20"/>' +
+        '<rect x="42" y="218" width="60" height="60"/><rect x="52" y="228" width="40" height="40" fill="#ffffff"/><rect x="62" y="238" width="20" height="20"/>' +
+        '<rect x="116" y="44" width="16" height="16"/><rect x="148" y="44" width="32" height="16"/><rect x="116" y="72" width="32" height="16"/><rect x="166" y="72" width="20" height="30"/>' +
+        '<rect x="42" y="120" width="18" height="30"/><rect x="74" y="120" width="32" height="18"/><rect x="52" y="166" width="42" height="18"/>' +
+        '<rect x="218" y="120" width="32" height="18"/><rect x="262" y="120" width="16" height="34"/><rect x="224" y="166" width="54" height="18"/>' +
+        '<rect x="120" y="218" width="32" height="18"/><rect x="166" y="218" width="18" height="34"/><rect x="204" y="218" width="74" height="18"/>' +
+        '<rect x="120" y="254" width="52" height="24"/><rect x="188" y="252" width="34" height="26"/><rect x="242" y="254" width="28" height="24"/>' +
+        '</g>' +
+        '<circle cx="160" cy="160" r="30" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2"/>' +
+        '<text x="160" y="168" text-anchor="middle" font-family="Arial,sans-serif" font-weight="800" font-size="24" fill="#64748b">m</text>' +
+        '</svg>'
+    );
+
+    var QR_CLEAN_TELEGRAM = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">' +
+        '<rect x="4" y="4" width="312" height="312" rx="44" fill="#ffffff"/>' +
+        '<g fill="#0c0c0c">' +
+        '<rect x="42" y="42" width="64" height="64" rx="16"/><rect x="53" y="53" width="42" height="42" rx="9" fill="#ffffff"/><rect x="63" y="63" width="22" height="22" rx="5"/>' +
+        '<rect x="214" y="42" width="64" height="64" rx="16"/><rect x="225" y="53" width="42" height="42" rx="9" fill="#ffffff"/><rect x="235" y="63" width="22" height="22" rx="5"/>' +
+        '<rect x="42" y="214" width="64" height="64" rx="16"/><rect x="53" y="225" width="42" height="42" rx="9" fill="#ffffff"/><rect x="63" y="235" width="22" height="22" rx="5"/>' +
+        '<rect x="120" y="44" width="14" height="14" rx="4"/><rect x="146" y="44" width="26" height="14" rx="4"/><rect x="184" y="44" width="22" height="14" rx="4"/>' +
+        '<rect x="120" y="68" width="26" height="14" rx="4"/><rect x="158" y="68" width="14" height="26" rx="4"/><rect x="184" y="68" width="14" height="14" rx="4"/><rect x="196" y="80" width="14" height="26" rx="4"/>' +
+        '<rect x="120" y="94" width="14" height="26" rx="4"/><rect x="146" y="104" width="38" height="14" rx="4"/>' +
+        '<rect x="44" y="120" width="14" height="26" rx="4"/><rect x="70" y="120" width="36" height="14" rx="4"/>' +
+        '<rect x="56" y="146" width="26" height="14" rx="4"/><rect x="94" y="146" width="14" height="26" rx="4"/>' +
+        '<rect x="44" y="172" width="36" height="14" rx="4"/><rect x="44" y="194" width="26" height="14" rx="4"/><rect x="82" y="184" width="24" height="22" rx="4"/>' +
+        '<rect x="214" y="120" width="26" height="14" rx="4"/><rect x="252" y="120" width="26" height="14" rx="4"/>' +
+        '<rect x="226" y="144" width="14" height="28" rx="4"/><rect x="252" y="144" width="26" height="14" rx="4"/>' +
+        '<rect x="214" y="182" width="38" height="14" rx="4"/><rect x="264" y="170" width="14" height="36" rx="4"/>' +
+        '<rect x="120" y="214" width="26" height="14" rx="4"/><rect x="158" y="214" width="14" height="26" rx="4"/><rect x="184" y="214" width="24" height="14" rx="4"/>' +
+        '<rect x="120" y="240" width="14" height="38" rx="4"/><rect x="146" y="252" width="38" height="14" rx="4"/><rect x="194" y="240" width="14" height="38" rx="4"/>' +
+        '<rect x="218" y="218" width="46" height="46" rx="10"/><rect x="228" y="228" width="26" height="26" rx="5" fill="#ffffff"/><rect x="236" y="236" width="10" height="10" rx="2"/>' +
+        '<rect x="218" y="270" width="26" height="10" rx="4"/><rect x="256" y="270" width="22" height="10" rx="4"/>' +
+        '</g>' +
+        '<circle cx="160" cy="160" r="28" fill="#0c0c0c"/>' +
+        '<path d="M146 160l27-11-5 24-8-7-6 5v-8l16-13-20 12z" fill="#ffffff"/>' +
+        '</svg>'
+    );
 
     var GENRES_MAP = {
         28: 'Боевик',
@@ -112,6 +154,15 @@
     ];
 
     var ROUNDS_OPTIONS = [10, 15, 20, 30];
+
+    var ROULETTE_DURATION_OPTIONS = [
+        { seconds: 3, label: '3 секунды' },
+        { seconds: 5, label: '5 секунд' },
+        { seconds: 10, label: '10 секунд' },
+        { seconds: 15, label: '15 секунд' },
+        { seconds: 20, label: '20 секунд' },
+        { seconds: 30, label: '30 секунд' }
+    ];
 
     var runtimeCache = {};
     var quizImageCache = {};
@@ -320,6 +371,140 @@
         return watched;
     }
 
+    // Встроенный звуковой движок кино-рулетки (Web Audio API, без внешних ссылок)
+    var RouletteAudio = (function () {
+        var ctx = null;
+        var masterGain = null;
+        var isActive = false;
+        var lastTickTime = 0;
+
+        function ensureContext() {
+            try {
+                var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return null;
+                if (!ctx) {
+                    ctx = new AudioCtx();
+                    masterGain = ctx.createGain();
+                    masterGain.gain.value = 1;
+                    masterGain.connect(ctx.destination);
+                }
+                if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+                    ctx.resume();
+                }
+                return ctx;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function unlock() {
+            ensureContext();
+        }
+
+        function start() {
+            var c = ensureContext();
+            isActive = true;
+            lastTickTime = 0;
+            if (c && masterGain) {
+                try {
+                    masterGain.gain.cancelScheduledValues(c.currentTime);
+                    masterGain.gain.setValueAtTime(1, c.currentTime);
+                } catch (e) {}
+            }
+        }
+
+        function playTick(progress) {
+            if (!isActive) return;
+            var nowMs = Date.now();
+            if (nowMs - lastTickTime < 40) return;
+            lastTickTime = nowMs;
+
+            var c = ensureContext();
+            if (!c || !masterGain || c.state !== 'running') return;
+
+            try {
+                var t = c.currentTime;
+                var p = Math.max(0, Math.min(1, progress || 0));
+
+                // Основной мягкий деревянный/механический щелчок рулетки, слегка понижающий тон при замедлении
+                var bodyOsc = c.createOscillator();
+                var bodyGain = c.createGain();
+                var startFreq = 1040 - (p * 300);
+                var endFreq = 410 - (p * 110);
+                bodyOsc.type = 'triangle';
+                bodyOsc.frequency.setValueAtTime(startFreq, t);
+                bodyOsc.frequency.exponentialRampToValueAtTime(Math.max(120, endFreq), t + 0.028);
+
+                bodyGain.gain.setValueAtTime(0.0001, t);
+                bodyGain.gain.linearRampToValueAtTime(0.15, t + 0.0025);
+                bodyGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.038);
+
+                bodyOsc.connect(bodyGain);
+                bodyGain.connect(masterGain);
+                bodyOsc.start(t);
+                bodyOsc.stop(t + 0.042);
+
+                // Короткий верхний тактильный призвук флажка
+                var clickOsc = c.createOscillator();
+                var clickGain = c.createGain();
+                clickOsc.type = 'sine';
+                clickOsc.frequency.setValueAtTime(2200 - (p * 550), t);
+                clickOsc.frequency.exponentialRampToValueAtTime(1100, t + 0.011);
+
+                clickGain.gain.setValueAtTime(0.0001, t);
+                clickGain.gain.linearRampToValueAtTime(0.05, t + 0.0015);
+                clickGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.014);
+
+                clickOsc.connect(clickGain);
+                clickGain.connect(masterGain);
+                clickOsc.start(t);
+                clickOsc.stop(t + 0.016);
+            } catch (e) {}
+        }
+
+        function playStop() {
+            var wasActive = isActive;
+            isActive = false;
+            if (!wasActive) return;
+            var c = ensureContext();
+            if (!c || !masterGain || c.state !== 'running') return;
+            try {
+                var t = c.currentTime;
+                var osc = c.createOscillator();
+                var g = c.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(620, t);
+                osc.frequency.exponentialRampToValueAtTime(460, t + 0.055);
+                g.gain.setValueAtTime(0.0001, t);
+                g.gain.linearRampToValueAtTime(0.11, t + 0.004);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + 0.065);
+                osc.connect(g);
+                g.connect(masterGain);
+                osc.start(t);
+                osc.stop(t + 0.07);
+            } catch (e) {}
+        }
+
+        function stop() {
+            isActive = false;
+            if (ctx && masterGain) {
+                try {
+                    var t = ctx.currentTime;
+                    masterGain.gain.cancelScheduledValues(t);
+                    masterGain.gain.setValueAtTime(0, t);
+                } catch (e) {}
+            }
+        }
+
+        return {
+            unlock: unlock,
+            start: start,
+            playTick: playTick,
+            playStop: playStop,
+            stop: stop
+        };
+    })();
+
     // =========================================================================
     // ХРАНИЛИЩЕ И МИГРАЦИЯ ДАННЫХ
     // =========================================================================
@@ -371,7 +556,9 @@
                 maxAgeYears: 0,
                 popularity: 'any',
                 excludeWatched: false,
-                streamMode: false
+                streamMode: false,
+                duration: 5,
+                soundEnabled: true
             },
             quiz: {
                 bestScore: 0,
@@ -501,6 +688,13 @@
                     }
                     def.roulette.excludeWatched = !!raw.roulette.excludeWatched;
                     def.roulette.streamMode = !!raw.roulette.streamMode;
+                    var savedDur = parseInt(raw.roulette.duration, 10);
+                    if ([3, 5, 10, 15, 20, 30].indexOf(savedDur) !== -1) {
+                        def.roulette.duration = savedDur;
+                    }
+                    if (raw.roulette.soundEnabled !== undefined) {
+                        def.roulette.soundEnabled = !!raw.roulette.soundEnabled;
+                    }
                 }
                 if (raw.quiz && typeof raw.quiz === 'object') {
                     def.quiz.bestScore = Math.max(0, parseInt(raw.quiz.bestScore, 10) || 0);
@@ -1268,12 +1462,11 @@
             '.ck-brand-mark { width: 2em; height: 2em; border-radius: 0.52em; background: #1d4ed8; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }' +
             '.ck-brand-title { font-size: 1.15em; font-weight: 800; letter-spacing: 0.04em; color: #ffffff; white-space: nowrap; }' +
 
-            /* Кнопка «Поддержать автора» — сердечко слева, весь текст строго внутри синего фона */
-            '.ck-brand-support { display: inline-flex !important; align-items: center !important; justify-content: center !important; width: auto !important; min-width: max-content !important; max-width: 100%; height: auto !important; min-height: 2.35em; padding: 0.44em 1.25em !important; border-radius: 0.55em; background: linear-gradient(135deg, #0284c7 0%, #0369a1 55%, #1d4ed8 100%); border: 1px solid #38bdf8; color: #ffffff; font-size: 0.8em; font-weight: 700; line-height: 1.25; cursor: pointer; white-space: nowrap !important; box-sizing: border-box !important; flex: 0 0 auto !important; box-shadow: 0 0 12px rgba(14, 165, 233, 0.34); transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease; }' +
-            '.ck-brand-support-ico { display: inline-flex; align-items: center; justify-content: center; width: 1.05em; height: 1.05em; margin-right: 0.48em; flex: 0 0 auto; }' +
-            '.ck-brand-support-ico svg { width: 100%; height: 100%; display: block; }' +
-            '.ck-brand-support-text { display: inline-block; white-space: nowrap !important; flex: 0 0 auto; }' +
-            '.ck-brand-support:hover, .ck-brand-support.focus { transform: scale(1.05); border-color: #bae6fd; box-shadow: 0 0 0 2px #38bdf8, 0 0 20px rgba(14, 165, 233, 0.6); color: #ffffff; }' +
+            /* Компактная кнопка «Поддержать автора» строго внутри контейнера без переполнения */
+            '.ck-brand-support { display: inline-flex; align-items: center; justify-content: center; gap: 0.42em; width: auto; max-width: none; height: auto; min-height: 2.15em; padding: 0.34em 0.9em; border-radius: 0.52em; background: linear-gradient(135deg, #0284c7 0%, #0369a1 55%, #1d4ed8 100%); border: 1px solid #38bdf8; color: #ffffff; font-size: 0.78em; font-weight: 700; line-height: 1.2; cursor: pointer; white-space: nowrap; overflow: visible; flex-shrink: 0; box-shadow: 0 0 12px rgba(14, 165, 233, 0.34); transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease; }' +
+            '.ck-brand-support svg { width: 1em; height: 1em; flex-shrink: 0; display: block; }' +
+            '.ck-brand-support span { display: inline-block; white-space: nowrap; }' +
+            '.ck-brand-support:hover, .ck-brand-support.focus { transform: scale(1.06); border-color: #bae6fd; box-shadow: 0 0 0 2px #38bdf8, 0 0 20px rgba(14, 165, 233, 0.6); color: #ffffff; }' +
             '.ck-brand-support.is-active { border-color: #ffffff; box-shadow: 0 0 0 2px #7dd3fc, 0 0 20px rgba(14, 165, 233, 0.6); }' +
 
             '.ck-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 0.36em; }' +
@@ -1315,7 +1508,7 @@
             '.ck-donate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(1.1em, 2.2vw, 1.8em); width: 100%; align-items: stretch; }' +
             '.ck-donate-card { display: flex; flex-direction: column; justify-content: space-between; gap: 1.1em; padding: clamp(1.25em, 2.2vw, 1.75em); border-radius: 1em; background: rgba(13,19,31,0.95); border: 1px solid rgba(56,189,248,0.34); box-shadow: 0 8px 28px rgba(2, 132, 199, 0.14); min-width: 0; }' +
             '.ck-donate-qr-frame { display: flex; align-items: center; justify-content: center; padding: 1.15em; border-radius: 0.85em; background: #ffffff; border: 2px solid rgba(56,189,248,0.45); margin-bottom: 1em; }' +
-            '.ck-donate-qr-frame img { width: 100%; max-width: 250px; height: 250px; object-fit: contain; display: block; }' +
+            '.ck-donate-qr-frame img { width: 100%; max-width: 230px; height: 230px; object-fit: contain; display: block; }' +
             '.ck-donate-card-heading { font-size: clamp(1.25em, 1.7vw, 1.5em); font-weight: 800; color: #ffffff; margin: 0 0 0.4em; }' +
             '.ck-donate-card-sub { font-size: 0.9em; line-height: 1.48; color: #cbd5e1; margin: 0 0 0.85em; }' +
             '.ck-donate-card-num { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: clamp(1.18em, 1.6vw, 1.42em); font-weight: 900; letter-spacing: 0.09em; color: #93c5fd; padding: 0.5em 0.75em; border-radius: 0.55em; background: rgba(29,78,216,0.18); border: 1px solid rgba(59,130,246,0.35); text-align: center; word-break: break-all; }' +
@@ -1615,6 +1808,7 @@
         var rouletteResult = null;
         var isRouletteSpinning = false;
         var rouletteRafId = null;
+        var rouletteRevealTimer = null;
 
         // Сессионное состояние «Угадай по кадру»
         var quizMode = 'tv_stills';
@@ -1658,6 +1852,11 @@
                 cancelAnimationFrame(rouletteRafId);
                 rouletteRafId = null;
             }
+            if (rouletteRevealTimer) {
+                clearTimeout(rouletteRevealTimer);
+                rouletteRevealTimer = null;
+            }
+            RouletteAudio.stop();
             isRouletteSpinning = false;
         }
 
@@ -1775,7 +1974,7 @@
 
             topbar.empty();
 
-            var supportBadgeBtn = $('<div class="ck-brand-support selector' + (activeTab === 'support' ? ' is-active' : '') + '"><span class="ck-brand-support-ico">' + heartSvg + '</span><span class="ck-brand-support-text">Поддержать автора</span></div>');
+            var supportBadgeBtn = $('<div class="ck-brand-support selector' + (activeTab === 'support' ? ' is-active' : '') + '">' + heartSvg + '<span>Поддержать автора</span></div>');
             supportBadgeBtn.on('hover:enter click', function () {
                 switchTab('support');
             });
@@ -2515,9 +2714,10 @@
             });
         }
 
-        function buildRouletteReel(pool, winnerCard) {
-            var totalSlots = 32;
-            var winnerIndex = 26;
+        function buildRouletteReel(pool, winnerCard, durationSec) {
+            var sec = parseInt(durationSec, 10) || 5;
+            var winnerIndex = Math.max(20, Math.min(160, Math.round(sec * 5.2)));
+            var totalSlots = winnerIndex + 8;
             var reel = [];
             var source = pool && pool.length ? pool : [winnerCard];
 
@@ -2535,7 +2735,7 @@
             return { items: reel, winnerIndex: winnerIndex };
         }
 
-        function renderRoulette() {
+        function renderRoulette(focusControlKey) {
             applyStreamClass();
 
             if (rouletteResult) {
@@ -2628,7 +2828,12 @@
             }
 
             body.empty().append(view);
-            refreshFocus(spinBtn);
+            var preferredTarget = spinBtn;
+            if (focusControlKey) {
+                var ctrlEl = view.find('[data-ck-rl-ctrl="' + focusControlKey + '"]');
+                if (ctrlEl.length) preferredTarget = ctrlEl;
+            }
+            refreshFocus(preferredTarget);
 
             if (!roulettePreviewPool.length) {
                 fetchRouletteCandidates(function (avail, allItems) {
@@ -2649,8 +2854,19 @@
             isRouletteSpinning = true;
             spinBtn.addClass('is-disabled').text('ПОДБИРАЕМ...');
 
+            var soundOn = !!state.roulette.soundEnabled;
+            if (soundOn) {
+                RouletteAudio.unlock();
+            } else {
+                RouletteAudio.stop();
+            }
+
+            var durationSec = parseInt(state.roulette.duration, 10) || 5;
+            if ([3, 5, 10, 15, 20, 30].indexOf(durationSec) === -1) durationSec = 5;
+
             fetchRouletteCandidates(function (available, allCached) {
                 if (activeTab !== 'roulette') {
+                    RouletteAudio.stop();
                     isRouletteSpinning = false;
                     return;
                 }
@@ -2659,7 +2875,7 @@
                 rouletteSeen[cardKey(winner)] = true;
                 roulettePreviewPool = allCached.slice(0, 18);
 
-                var reelData = buildRouletteReel(allCached, winner);
+                var reelData = buildRouletteReel(allCached, winner, durationSec);
                 track.empty();
                 track.css('transform', 'translate3d(0px, 0px, 0px)');
 
@@ -2686,17 +2902,30 @@
                 var secondSlot = track.find('.ck-rl-item').eq(1);
                 var slotWidth = firstSlot.outerWidth() || 170;
                 var stepPx = secondSlot.length ? (secondSlot.position().left - firstSlot.position().left) : (slotWidth + 14);
+                if (!stepPx || stepPx <= 0) stepPx = slotWidth + 14;
                 var vpWidth = viewport.innerWidth() || 800;
 
                 var targetCenter = (reelData.winnerIndex * stepPx) + (slotWidth / 2);
                 var finalTranslateX = (vpWidth / 2) - targetCenter;
 
-                var duration = isReducedMotion(state) ? 450 : 4100;
+                var duration = durationSec * 1000;
                 var startTime = null;
+                var tickOffset = slotWidth * 0.35;
+                var lastTickSlot = Math.floor(((vpWidth / 2) - tickOffset) / stepPx);
+
+                if (soundOn) {
+                    RouletteAudio.start();
+                }
 
                 function finishSpin() {
                     isRouletteSpinning = false;
                     rouletteRafId = null;
+
+                    if (soundOn && activeTab === 'roulette') {
+                        RouletteAudio.playStop();
+                    } else {
+                        RouletteAudio.stop();
+                    }
 
                     var winSlot = track.find('.ck-rl-item').eq(reelData.winnerIndex);
                     winSlot.addClass('is-winner');
@@ -2704,7 +2933,9 @@
                     spinBtn.text('ВЫБРАНО!');
 
                     var revealDelay = isReducedMotion(state) ? 150 : 750;
-                    setTimeout(function () {
+                    if (rouletteRevealTimer) clearTimeout(rouletteRevealTimer);
+                    rouletteRevealTimer = setTimeout(function () {
+                        rouletteRevealTimer = null;
                         if (activeTab === 'roulette') {
                             rouletteResult = winner;
                             renderRouletteResultModal(winner);
@@ -2713,13 +2944,26 @@
                 }
 
                 function stepFrame(timestamp) {
+                    if (!isRouletteSpinning || activeTab !== 'roulette') {
+                        RouletteAudio.stop();
+                        return;
+                    }
                     if (!startTime) startTime = timestamp;
                     var elapsed = timestamp - startTime;
                     var progress = Math.min(1, elapsed / duration);
-                    var eased = 1 - Math.pow(1 - progress, 3);
+                    var eased = 1 - Math.pow(1 - progress, 2.4);
                     var currentX = finalTranslateX * eased;
 
                     track.css('transform', 'translate3d(' + currentX.toFixed(1) + 'px, 0px, 0px)');
+
+                    if (soundOn && progress < 1) {
+                        var pointerPos = (vpWidth / 2) - currentX;
+                        var currentSlot = Math.floor((pointerPos - tickOffset) / stepPx);
+                        if (currentSlot > lastTickSlot) {
+                            lastTickSlot = currentSlot;
+                            RouletteAudio.playTick(progress);
+                        }
+                    }
 
                     if (progress < 1 && activeTab === 'roulette') {
                         rouletteRafId = requestAnimationFrame(stepFrame);
@@ -2730,6 +2974,7 @@
 
                 rouletteRafId = requestAnimationFrame(stepFrame);
             }, function (errMsg) {
+                RouletteAudio.stop();
                 isRouletteSpinning = false;
                 spinBtn.removeClass('is-disabled').text('КРУТИТЬ');
                 showToast(errMsg);
@@ -2827,7 +3072,7 @@
             }
             panel.append(gRating);
 
-            var gExtra = $('<div class="ck-setting-group" style="margin-bottom:0;"><div class="ck-setting-label">Популярность и фильтрация</div><div class="ck-chips"></div></div>');
+            var gExtra = $('<div class="ck-setting-group"><div class="ck-setting-label">Популярность и фильтрация</div><div class="ck-chips"></div></div>');
             for (var pop = 0; pop < POPULARITY_OPTIONS.length; pop++) {
                 (function (opt) {
                     var chip = $('<div class="ck-chip selector' + (r.popularity === opt.id ? ' is-selected' : '') + '">' + esc(opt.label) + '</div>');
@@ -2849,6 +3094,43 @@
             gExtra.find('.ck-chips').append(watchedChip);
 
             panel.append(gExtra);
+
+            var gDuration = $('<div class="ck-setting-group"><div class="ck-setting-label">⏱ Продолжительность рулетки</div><div class="ck-chips"></div></div>');
+            for (var dIdx = 0; dIdx < ROULETTE_DURATION_OPTIONS.length; dIdx++) {
+                (function (opt) {
+                    var ctrlKey = 'dur_' + opt.seconds;
+                    var chip = $('<div class="ck-chip selector' + (r.duration === opt.seconds ? ' is-selected' : '') + '" data-ck-rl-ctrl="' + ctrlKey + '">' + esc(opt.label) + '</div>');
+                    chip.on('hover:enter', function () {
+                        if (isRouletteSpinning) return;
+                        r.duration = opt.seconds;
+                        StorageManager.save(state);
+                        renderRoulette(ctrlKey);
+                    });
+                    gDuration.find('.ck-chips').append(chip);
+                })(ROULETTE_DURATION_OPTIONS[dIdx]);
+            }
+            panel.append(gDuration);
+
+            var gSound = $('<div class="ck-setting-group" style="margin-bottom:0;"><div class="ck-setting-label">🔊 Звук рулетки</div><div class="ck-chips"></div></div>');
+            var soundOnChip = $('<div class="ck-chip selector' + (r.soundEnabled ? ' is-selected' : '') + '" data-ck-rl-ctrl="snd_on">ВКЛ</div>');
+            soundOnChip.on('hover:enter', function () {
+                if (isRouletteSpinning) return;
+                r.soundEnabled = true;
+                RouletteAudio.unlock();
+                StorageManager.save(state);
+                renderRoulette('snd_on');
+            });
+            var soundOffChip = $('<div class="ck-chip selector' + (!r.soundEnabled ? ' is-selected' : '') + '" data-ck-rl-ctrl="snd_off">ВЫКЛ</div>');
+            soundOffChip.on('hover:enter', function () {
+                if (isRouletteSpinning) return;
+                r.soundEnabled = false;
+                RouletteAudio.stop();
+                StorageManager.save(state);
+                renderRoulette('snd_off');
+            });
+            gSound.find('.ck-chips').append(soundOnChip).append(soundOffChip);
+            panel.append(gSound);
+
             return panel;
         }
 
@@ -3892,6 +4174,10 @@
                 '</div>'
             );
 
+            monoCard.find('img').on('error', function () {
+                $(this).off('error').attr('src', QR_CLEAN_MONOBANK);
+            });
+
             var copyCardBtn = $('<div class="ck-btn ck-btn--primary selector">Скопировать номер карты</div>');
             copyCardBtn.on('hover:enter', function () {
                 copyTextToClipboard(AUTHOR_CARD_NUMBER, function () {
@@ -3919,6 +4205,10 @@
                     '<div class="ck-donate-card-actions"></div>' +
                 '</div>'
             );
+
+            tgCard.find('img').on('error', function () {
+                $(this).off('error').attr('src', QR_CLEAN_TELEGRAM);
+            });
 
             var openTgBtn = $('<div class="ck-btn ck-btn--primary selector" style="width:100%;">Перейти в Telegram</div>');
             openTgBtn.on('hover:enter', function () {
@@ -4122,6 +4412,12 @@
                 }
             });
 
+            shell.on('touchstart.ckaudio mousedown.ckaudio keydown.ckaudio', function () {
+                if (state && state.roulette && state.roulette.soundEnabled) {
+                    RouletteAudio.unlock();
+                }
+            });
+
             renderTopbar();
             renderHome();
             return this.render();
@@ -4188,7 +4484,7 @@
             clearTimeout(toastTimer);
             stopRouletteAnimation();
             backdropMgr.destroy();
-            shell.off('wheel.ck');
+            shell.off('wheel.ck touchstart.ckaudio mousedown.ckaudio keydown.ckaudio');
             network.clear();
             scroll.destroy();
             toastEl.remove();
@@ -4258,3 +4554,5 @@
         });
     }
 })();
+
+Відображається "cinema-king-v3.js".
