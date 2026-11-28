@@ -1,5 +1,5 @@
 /*!
- * ZORIO v6.0.0 — IPTV Engine 2.0 (9 Unified Sources, SourceResolver, ErrorHandler, StreamHealthChecker, SmartCache & Dedicated Player)
+ * ZORIO v6.1.0 — IPTV Engine 2.0 (User Playlists, SourceResolver, ErrorHandler, StreamHealthChecker, SmartCache & Dedicated Player)
  * Built from modular source tree (src/, css/, templates/)
  * ES5-compatible for Smart TV (WebOS, Tizen), Android TV, Desktop & Mobile
  * License: MIT
@@ -23,137 +23,13 @@
 
     var Zorio = global.Zorio = global.Zorio || {};
 
-    Zorio.VERSION = '6.0.0';
+    Zorio.VERSION = '6.1.0';
     Zorio.PLUGIN_ID = 'zorio';
     Zorio.PLUGIN_NAME = 'ZORIO';
 
-    Zorio.DEFAULT_EPG_URL = 'https://DuckKota.github.io/iptv/epg/guide.xml.gz';
-
-    /**
-     * Unified ZORIO IPTV Engine 2.0 Sources (9 public playlists):
-     * Phase 1 (fast priority sources — loaded immediately on startup, max 2 concurrent):
-     *   1. DuckKota Best
-     *   2. IPTV Ukraine
-     *   3. Mater IPTV
-     *   4. IPTV-org Ukraine
-     *   5. IPTV-org Sports
-     *   6. IPTV-org News
-     * Phase 2 (large international catalogs — loaded in background without blocking UI):
-     *   7. DuckKota Online
-     *   8. DuckKota Everything
-     *   9. IPTV-org All
-     */
-    Zorio.DEFAULT_SOURCES = [
-        {
-            id: 'duckkota_best',
-            name: 'DuckKota Best',
-            provider: 'DuckKota',
-            url: 'https://DuckKota.github.io/iptv/playlists/best.m3u',
-            tier: 'best',
-            priority: 1,
-            phase: 1,
-            defaultCountry: '',
-            defaultLanguage: ''
-        },
-        {
-            id: 'iptv_ukraine',
-            name: 'IPTV Ukraine',
-            provider: 'IPTV Ukraine',
-            url: 'https://iptv.org.ua/iptv/ua.m3u',
-            tier: 'regional',
-            priority: 2,
-            phase: 1,
-            defaultCountry: 'UA',
-            defaultLanguage: 'ukr'
-        },
-        {
-            id: 'mater_iptv',
-            name: 'Mater IPTV',
-            provider: 'Mater IPTV',
-            url: 'https://mater.com.ua/ip/ua.m3u',
-            tier: 'regional',
-            priority: 3,
-            phase: 1,
-            defaultCountry: 'UA',
-            defaultLanguage: 'ukr'
-        },
-        {
-            id: 'iptvorg_ua',
-            name: 'IPTV-org Україна',
-            provider: 'IPTV-org',
-            url: 'https://iptv-org.github.io/iptv/countries/ua.m3u',
-            tier: 'regional',
-            priority: 4,
-            phase: 1,
-            defaultCountry: 'UA',
-            defaultLanguage: 'ukr'
-        },
-        {
-            id: 'iptvorg_sports',
-            name: 'IPTV-org Спорт',
-            provider: 'IPTV-org',
-            url: 'https://iptv-org.github.io/iptv/categories/sports.m3u',
-            tier: 'category',
-            priority: 5,
-            phase: 1,
-            defaultCountry: '',
-            defaultLanguage: ''
-        },
-        {
-            id: 'iptvorg_news',
-            name: 'IPTV-org Новини',
-            provider: 'IPTV-org',
-            url: 'https://iptv-org.github.io/iptv/categories/news.m3u',
-            tier: 'category',
-            priority: 6,
-            phase: 1,
-            defaultCountry: '',
-            defaultLanguage: ''
-        },
-        {
-            id: 'duckkota_online',
-            name: 'DuckKota Online',
-            provider: 'DuckKota',
-            url: 'https://DuckKota.github.io/iptv/playlists/online.m3u',
-            tier: 'online',
-            priority: 7,
-            phase: 2,
-            defaultCountry: '',
-            defaultLanguage: ''
-        },
-        {
-            id: 'duckkota_everything',
-            name: 'DuckKota Everything',
-            provider: 'DuckKota',
-            url: 'https://DuckKota.github.io/iptv/playlists/index.m3u',
-            tier: 'everything',
-            priority: 8,
-            phase: 2,
-            defaultCountry: '',
-            defaultLanguage: ''
-        },
-        {
-            id: 'iptvorg_all',
-            name: 'IPTV-org Усі канали',
-            provider: 'IPTV-org',
-            url: 'https://iptv-org.github.io/iptv/index.m3u',
-            tier: 'everything',
-            priority: 9,
-            phase: 2,
-            defaultCountry: '',
-            defaultLanguage: ''
-        }
-    ];
-
-    Zorio.DEFAULT_PLAYLIST = {
-        id: 'zorio_engine2_iptv',
-        name: 'ZORIO IPTV Engine 2.0 (9 джерел)',
-        url: 'DuckKota (3) + IPTV Ukraine + Mater IPTV + IPTV-org (4)',
-        type: 'smart',
-        isDefault: true,
-        autoUpdateHours: 24,
-        sources: Zorio.DEFAULT_SOURCES
-    };
+    Zorio.DEFAULT_EPG_URL = '';
+    Zorio.DEFAULT_SOURCES = [];
+    Zorio.DEFAULT_PLAYLIST = null;
 
     var COUNTRY_LABELS = {
         ALL: 'Усі країни',
@@ -3207,55 +3083,26 @@
      * any legacy default playlists cleanly without deleting user-added playlists.
      */
     PlaylistService.prototype.ensureDefaultPlaylist = function () {
-        var def = Zorio.DEFAULT_PLAYLIST;
-        if (!def) return null;
-
+        // No built-in sources: remove any legacy built-in playlists while keeping all user-added playlists
         var playlists = this.getPlaylists();
-        var existing = null;
+        var cleaned = [];
         var changed = false;
-
         for (var i = 0; i < playlists.length; i++) {
             var pl = playlists[i];
-            if (pl.id === def.id || pl.isDefault || pl.id === 'zorio_unified_iptv' || pl.id === 'zorio_smart_ua' || pl.id === 'default_ua_iptv') {
-                if (pl.id !== def.id) {
-                    Zorio.Storage.removePlaylistCache(pl.id);
-                    pl.id = def.id;
-                    pl.updatedAt = 0;
-                    changed = true;
-                }
-                if (pl.name !== def.name || pl.url !== def.url || pl.type !== 'smart') {
-                    pl.name = def.name;
-                    pl.url = def.url;
-                    pl.type = 'smart';
-                    pl.isDefault = true;
-                    changed = true;
-                }
-                existing = pl;
-                break;
+            if (pl && (pl.isDefault || pl.type === 'smart' ||
+                pl.id === 'zorio_engine2_iptv' || pl.id === 'zorio_unified_iptv' ||
+                pl.id === 'zorio_smart_ua' || pl.id === 'default_ua_iptv')) {
+                Zorio.Storage.removePlaylistCache(pl.id);
+                changed = true;
+                continue;
             }
+            cleaned.push(pl);
         }
-
-        if (!existing) {
-            existing = {
-                id: def.id,
-                name: def.name,
-                type: 'smart',
-                url: def.url,
-                isDefault: true,
-                rawContent: '',
-                channelCount: 0,
-                updatedAt: 0,
-                status: 'loading',
-                error: '',
-                epgUrl: ''
-            };
-            playlists.unshift(existing);
-            Zorio.Storage.savePlaylists(playlists);
-        } else if (changed) {
-            Zorio.Storage.savePlaylists(playlists);
+        if (changed) {
+            Zorio.Storage.savePlaylists(cleaned);
+            if (cleaned.length === 0) Zorio.Storage.setActivePlaylistId('all');
         }
-
-        return existing;
+        return null;
     };
 
     PlaylistService.prototype._computeStats = function (channels, totalLoaded, okSources, totalSources) {
@@ -3731,7 +3578,6 @@
         var next = [];
         for (var i = 0; i < playlists.length; i++) {
             if (playlists[i].id === id) {
-                if (playlists[i].isDefault) next.push(playlists[i]);
                 continue;
             }
             next.push(playlists[i]);
@@ -5312,13 +5158,18 @@
             }
 
             if (!catalog.channels.length) {
-                listEl.innerHTML =
-                    '<div class="zorio-empty" style="padding:1.8em;">' +
-                        '<div class="zorio-empty__title">Джерела каналів тимчасово недоступні</div>' +
-                        '<div class="zorio-empty__text">Перевірте підключення до інтернету та спробуйте оновити список.</div>' +
-                        '<div class="zorio-btn-primary zorio-focusable" data-action="retry-default-playlist">Повторити завантаження</div>' +
-                    '</div>';
-                
+                var hasPlaylists = Zorio.playlistService.getPlaylists().length > 0;
+                listEl.innerHTML = hasPlaylists
+                    ? ('<div class="zorio-empty" style="padding:1.8em;">' +
+                        '<div class="zorio-empty__title">Не вдалося завантажити канали</div>' +
+                        '<div class="zorio-empty__text">Перевірте посилання у розділі «Плейлисти» або оновіть список.</div>' +
+                        '<div class="zorio-btn-primary zorio-focusable" data-action="open-playlists">Відкрити плейлисти</div>' +
+                    '</div>')
+                    : ('<div class="zorio-empty" style="padding:1.8em;">' +
+                        '<div class="zorio-empty__title">Плейлисти не додано</div>' +
+                        '<div class="zorio-empty__text">Додайте власний IPTV-плейлист за URL або з локального файлу (.m3u / .m3u8).</div>' +
+                        '<div class="zorio-btn-primary zorio-focusable" data-action="open-playlists">+ Додати плейлист</div>' +
+                    '</div>');
                 return;
             }
 
@@ -5535,12 +5386,8 @@
     TvView.prototype.onAction = function (el) {
         var action = el.getAttribute('data-action');
 
-        if (action === 'retry-default-playlist') {
-            var def = Zorio.playlistService.ensureDefaultPlaylist();
-            if (def) {
-                Zorio.playlistService.refreshPlaylist(def.id);
-                this._renderChannels(true);
-            }
+        if (action === 'open-playlists') {
+            this._app.showView('playlists');
             return true;
         }
 
@@ -5644,7 +5491,6 @@
         var gridEl = this._root.querySelector('[data-zorio-playlists-grid]');
         if (!gridEl) return;
 
-        Zorio.playlistService.ensureDefaultPlaylist();
         var playlists = Zorio.playlistService.getPlaylists();
         var activeId = Zorio.playlistService.getActivePlaylistId();
 
@@ -5665,6 +5511,19 @@
                     '<div class="zorio-btn-secondary zorio-focusable" data-action="activate-playlist" data-id="all">' + (allActive ? '✓ Обрано' : 'Дивитись усі разом') + '</div>' +
                 '</div>' +
             '</div>';
+        }
+
+        if (!playlists.length) {
+            gridEl.innerHTML =
+                '<div class="zorio-pl-card">' +
+                    '<div class="zorio-pl-card__head">' +
+                        '<div class="zorio-pl-card__name">Немає доданих плейлистів</div>' +
+                    '</div>' +
+                    '<div class="zorio-pl-card__stats">' +
+                        '<div>Натисніть «+ Додати за URL» або «+ Локальний файл», щоб підключити власний M3U/M3U8 плейлист.</div>' +
+                    '</div>' +
+                '</div>';
+            return;
         }
 
         for (var i = 0; i < playlists.length; i++) {
@@ -5806,7 +5665,7 @@
         }
         if (action === 'delete-playlist' && id) {
             if (Zorio.playlistService.removePlaylist(id)) self._notify('Плейлист видалено');
-            else self._notify('Вбудований плейлист не можна видалити');
+            else self._notify('Плейлист не знайдено');
             self.refreshView();
             return true;
         }
@@ -5847,8 +5706,8 @@
             component: 'zorio',
             param: { name: 'zorio_open_playlists', type: 'trigger' },
             field: {
-                name: 'Користувацькі плейлисти (додатково)',
-                description: 'Додати власний M3U/M3U8 плейлист або змінити URL EPG'
+                name: 'Мої IPTV-плейлисти',
+                description: 'Додати або видалити власний M3U/M3U8 плейлист та налаштувати EPG'
             },
             onChange: function () {
                 if (Lampa.Activity && typeof Lampa.Activity.push === 'function') {
@@ -5860,23 +5719,6 @@
                         page: 1
                     });
                 }
-            }
-        });
-
-        Lampa.SettingsApi.addParam({
-            component: 'zorio',
-            param: { name: 'zorio_refresh_default', type: 'trigger' },
-            field: {
-                name: 'Оновити каталог ZORIO IPTV (DuckKota + UA)',
-                description: 'Оновити DuckKota (Best, Online, Everything, UA, UKR), IPTV Ukraine та Mater IPTV'
-            },
-            onChange: function () {
-                var def = Zorio.playlistService.ensureDefaultPlaylist();
-                if (!def) return;
-                if (Lampa.Noty) Lampa.Noty.show('ZORIO: оновлення об’єднаного каталогу IPTV…');
-                Zorio.playlistService.refreshPlaylist(def.id, function (ok, msg) {
-                    if (Lampa.Noty) Lampa.Noty.show((ok ? '✓ ' : '✗ ') + msg);
-                });
             }
         });
 
@@ -5894,7 +5736,6 @@
                     ' • Робочих: ' + s.working +
                     ' • Тимч. недоступні: ' + s.temporarilyUnavailable +
                     ' • Геоблок/Авториз.: ' + s.geoBlocked +
-                    ' • Кодек: ' + s.unsupportedCodec +
                     ' • Без альтернатив: ' + s.withoutAlternatives;
                 if (Lampa.Noty) Lampa.Noty.show(text);
             }
@@ -5909,8 +5750,8 @@
                 'default': '24'
             },
             field: {
-                name: 'Автоматичне оновлення каналів',
-                description: 'Інтервал фонового оновлення вбудованого та додаткових плейлистів'
+                name: 'Автоматичне оновлення плейлистів',
+                description: 'Інтервал фонового оновлення ваших підключених плейлистів'
             }
         });
 
@@ -5952,11 +5793,11 @@
             component: 'zorio',
             param: { name: KEYS.EPG_URL, type: 'input', values: '', 'default': '' },
             field: {
-                name: 'Власне посилання на EPG (опціонально)',
-                description: 'За замовчуванням використовується DuckKota EPG (guide.xml.gz)'
+                name: 'Посилання на EPG (опціонально)',
+                description: 'Вкажіть URL телепрограми XMLTV (.xml або .xml.gz)'
             },
             onChange: function (val) {
-                if (Zorio.epgService) Zorio.epgService.load(val || Zorio.DEFAULT_EPG_URL);
+                if (Zorio.epgService) Zorio.epgService.load(val || '');
             }
         });
 
@@ -6343,7 +6184,7 @@
             type: 'video',
             version: Zorio.VERSION,
             name: Zorio.PLUGIN_NAME,
-            description: 'ZORIO IPTV Engine 2.0 — єдиний IPTV-агрегатор (DuckKota, IPTV Ukraine, Mater IPTV, IPTV-org), Source Resolver, розумне автоперемикання, EPG та власний плеєр',
+            description: 'ZORIO — IPTV-каталог для власних M3U/M3U8 плейлистів з EPG та штатним плеєром Lampa',
             component: Zorio.PLUGIN_ID
         };
         try {
